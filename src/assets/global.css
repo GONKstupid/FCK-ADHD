@@ -1,0 +1,73 @@
+@import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* --- Light theme (default) --- */
+  --canvas-bg: #f5f3ec;
+  --canvas-dot: #cfcbbE;
+  --ink: #1b1b1a;
+  --ink-soft: #5b584f;
+  --paper: #f5f3ec;
+  --paper-border: #cfcbbE;
+  --accent: #ff3b30;
+
+  /* --- Semantic aliases --- */
+  --color-off-white: #f5f5f0;
+  --color-near-black: #1a1a1a;
+  --color-signal-red: #ff3b30;
+
+  /* --- Typography --- */
+  --font-dot: 'DotGothic16', monospace;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  color-scheme: light dark;
+}
+
+[data-theme='dark'] {
+  --canvas-bg: #141412;
+  --canvas-dot: #2a2a27;
+  --ink: #f5f3ec;
+  --ink-soft: #a9a69c;
+  --paper: #1c1c1a;
+  --paper-border: #3a3936;
+  --accent: #ff453a;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-mono);
+  color: var(--ink);
+  background-color: var(--canvas-bg);
+  min-height: 100dvh;
+  line-height: 1.5;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+}
