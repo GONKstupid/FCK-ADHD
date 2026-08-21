@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>FCK-ADHD — UI-Konzept</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --canvas-bg: #EDEAE1;
+  --canvas-dot: #CFCBBE;
+  --ink: #1B1B1A;
+  --ink-soft: #5B584F;
+  --paper: #F5F3EC;
+  --paper-border: #CFCBBE;
+  --accent: #FF0000;
+  transition: none;
+}
+
+[data-theme="dark"] {
+  --canvas-bg: #141412;
+  --canvas-dot: #2A2A27;
+  --ink: #F5F3EC;
+  --ink-soft: #A9A69C;
+  --paper: #1C1C1A;
+  --paper-border: #3A3936;
+  --accent: #FF453A;
+}
+
+body {
+  background-color: var(--canvas-bg);
+  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
+  background-size: 18px 18px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--ink);
+  padding: 48px 24px 64px;
+}
+
+.intro {
+  max-width: 680px;
+  margin: 0 auto 28px;
+  text-align: center;
+}
+
+.intro h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.intro p {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch {
+  width: 40px;
+  height: 22px;
+  border-radius: 20px;
+  border: 1px solid var(--paper-border);
+  background: var(--paper);
+  position: relative;
+}
+
+.switch .knob {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ink);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: left 0.15s ease;
+}
+
+[data-theme="dark"] .switch .knob {
+  left: 20px;
+  background: var(--accent);
+}
+
+.board {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 40px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.phone-wrap { text-align: center; }
+
+.phone {
+  width: 260px;
+  height: 560px;
+  border-radius: 34px;
+  border: 6px solid var(--ink);
+  overflow: hidden;
+  position: relative;
+  background: var(--paper);
+}
+
+/* Vollbild-Alarm ist bewusst zustandsbasiert, nicht theme-abhängig: immer invertiert */
+.phone.alarm {
+  background: #0D0D0C;
+  color: #F5F3EC;
+  border-color: #0D0D0C;
+}
+
+.caption {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.caption b { color: var(--ink); font-weight: 700; }
+
+.glyph-strip {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 20px 0 12px;
+}
+
+.glyph-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--paper-border);
+}
+
+.phone.alarm .glyph-dot { background: #3A3936; }
+
+.glyph-dot.on { background: var(--ink); }
+.phone.alarm .glyph-dot.on { background: #F5F3EC; }
+
+.glyph-dot.alert {
+  background: #FF3B30;
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.screen { padding: 4px 20px 20px; height: 100%; display: flex; flex-direction: column; }
+
+.clock {
+  font-family: 'DotGothic16', monospace;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-align: right;
+  color: var(--ink-soft);
+  margin-bottom: 24px;
+}
+
+.status-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--paper-border);
+  margin-bottom: 28px;
+}
+
+.state-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: #4A8B5C; }
+
+.routine-card {
+  border: 1px solid var(--paper-border);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.routine-card .name { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.routine-card .meta { font-size: 11px; color: var(--ink-soft); }
+
+.qr-chip {
+  width: 34px; height: 34px;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'DotGothic16', monospace;
+  font-size: 10px;
+  float: right;
+}
+
+.add-btn {
+  margin-top: auto;
+  font-size: 12px;
+  text-align: center;
+  color: var(--ink-soft);
+  border: 1px dashed var(--paper-border);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.alarm-count {
+  font-family: 'DotGothic16', monospace;
+  font-size: 74px;
+  text-align: center;
+  color: var(--accent);
+  line-height: 1;
+  margin: 18px 0 6px;
+  letter-spacing: 0.04em;
+}
+
+.alarm-count-label {
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: #8A877D;
+  margin-bottom: 32px;
+}
+
+.alarm-label {
+  text-align: center;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.alarm-sub {
+  text-align: center;
+  font-size: 12px;
+  color: #B8B4AC;
+  margin-bottom: auto;
+}
+
+.primary-btn {
+  background: #F5F3EC;
+  color: #1B1B1A;
+  border: none;
+  border-radius: 14px;
+  padding: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.02em;
+  margin-bottom: 12px;
+}
+
+.extend-link {
+  text-align: center;
+  font-size: 11px;
+  color: #6B6863;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding-bottom: 4px;
+}
+
+.step-indicator {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--ink-soft);
+  margin-bottom: 26px;
+}
+
+.step-indicator .active { color: var(--ink); font-weight: 700; }
+
+.puzzle-box {
+  border: 1px solid var(--paper-border);
+  border-radius: 16px;
+  padding: 22px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.puzzle-box .q {
+  font-family: 'DotGothic16', monospace;
+  font-size: 28px;
+  margin-bottom: 12px;
+}
+
+.puzzle-box input {
+  width: 70px;
+  font-family: 'DotGothic16', monospace;
+  font-size: 20px;
+  text-align: center;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  padding: 6px;
+  background: transparent;
+  color: inherit;
+}
+
+.hold-ring {
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  border: 3px solid var(--paper-border);
+  border-top-color: var(--accent);
+  margin: 12px auto 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  color: var(--ink-soft);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.hint {
+  text-align: center;
+  font-size: 10px;
+  color: var(--ink-soft);
+  margin-top: auto;
+}
+
+.legend {
+  max-width: 680px;
+  margin: 56px auto 0;
+  border-top: 1px solid var(--paper-border);
+  padding-top: 24px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.8;
+}
+
+.legend b { color: var(--ink); }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <h1>FCK-ADHD — UI-Konzept</h1>
+  <p>Angelehnt an die Punktraster-/Technik-Ästhetik von Nothing OS, aber neu interpretiert<br>und ausschließlich mit Open-Source-Schriften (Google Fonts, SIL Open Font License) umgesetzt.</p>
+  <div class="theme-toggle" onclick="toggleTheme()">
+    <span id="theme-label">Ansicht: hell</span>
+    <span class="switch"><span class="knob"></span></span>
+  </div>
+</div>
+
+<div class="board">
+
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="glyph-strip">
+          <div class="glyph-dot on"></div><div class="glyph-dot"></div><div class="glyph-dot"></div>
+          <div class="glyph-dot"></div><div class="glyph-dot"></div><div class="glyph-dot"></div>
+          <div class="glyph-dot"></div><div class="glyph-dot"></div><div class="glyph-dot on"></div>
+        </div>
+        <div class="clock">14:32</div>
+        <div class="status-label">status</div>
+        <div class="state-pill"><span class="dot"></span>alles sicher</div>
+        <div class="routine-card">
+          <div class="qr-chip">QR</div>
+          <div class="name">Herd &amp; Dunstabzugshaube</div>
+          <div class="meta">zuletzt bestätigt: heute, 12:04</div>
+        </div>
+        <div class="add-btn">+ neue Routine anlegen</div>
+      </div>
+    </div>
+    <div class="caption"><b>Dashboard</b><br>folgt dem Hell-/Dunkelmodus-Umschalter oben</div>
+  </div>
+
+  <div class="phone-wrap">
+    <div class="phone alarm">
+      <div class="screen">
+        <div class="glyph-strip">
+          <div class="glyph-dot alert"></div><div class="glyph-dot alert"></div><div class="glyph-dot on"></div>
+          <div class="glyph-dot on"></div><div class="glyph-dot alert"></div><div class="glyph-dot on"></div>
+          <div class="glyph-dot alert"></div><div class="glyph-dot on"></div><div class="glyph-dot alert"></div>
+        </div>
+        <div class="alarm-count" style="color:#FF3B30;">03</div>
+        <div class="alarm-count-label">wiederholung</div>
+        <div class="alarm-label">Herd ausmachen</div>
+        <div class="alarm-sub">seit 4 min unbestätigt</div>
+        <div class="primary-btn">QR-code scannen, um zu bestätigen</div>
+        <div class="extend-link">stattdessen verlängern</div>
+      </div>
+    </div>
+    <div class="caption"><b>Vollbild-Alarm</b><br>zustandsbasiert, bleibt immer invertiert — unabhängig vom Theme</div>
+  </div>
+
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="glyph-strip">
+          <div class="glyph-dot on"></div><div class="glyph-dot on"></div><div class="glyph-dot"></div>
+          <div class="glyph-dot"></div><div class="glyph-dot"></div><div class="glyph-dot"></div>
+          <div class="glyph-dot"></div><div class="glyph-dot"></div><div class="glyph-dot"></div>
+        </div>
+        <div class="step-indicator"><span class="active">1 rechnen</span><span>—</span><span>2 halten</span></div>
+        <div class="puzzle-box">
+          <div class="q">6 × 7 =</div>
+          <input type="text" placeholder="?">
+        </div>
+        <div class="hold-ring">gedrückt<br>halten</div>
+        <div class="hint">Verlängerung 2 von 3 · 5–60 min wählbar</div>
+      </div>
+    </div>
+    <div class="caption"><b>Verlängerung</b><br>folgt dem Hell-/Dunkelmodus-Umschalter oben</div>
+  </div>
+
+</div>
+
+<div class="legend">
+  <p><b>Darkmode</b><br>
+  Dashboard und Verlängerung folgen einem echten Hell-/Dunkel-Theme (Umschalter oben). Der Vollbild-Alarm bleibt bewusst immer im invertierten Look — er soll sich unter allen Umständen maximal vom Ruhezustand abheben, unabhängig davon, welches Theme gerade aktiv ist.</p>
+  <p style="margin-top:12px;"><b>Typografie</b><br>
+  Dot-Matrix-Akzent (Zahlen, Uhrzeit, Zähler): <i>DotGothic16</i> — Google Fonts, SIL Open Font License<br>
+  Text &amp; UI: <i>JetBrains Mono</i> — Google Fonts, SIL Open Font License<br>
+  Nothings eigene Schrift „Ndot" ist proprietär und wird hier bewusst nicht verwendet.</p>
+  <p style="margin-top:12px;"><b>Farben</b><br>
+  <span class="swatch" style="background:#F5F3EC;border:1px solid #CFCBBE;"></span>Off-white (Hell-Theme)
+  &nbsp;&nbsp;<span class="swatch" style="background:#1C1C1A;border:1px solid #3A3936;"></span>Fast-Schwarz (Dunkel-Theme)
+  &nbsp;&nbsp;<span class="swatch" style="background:#FF0000;"></span>Reines Rot, angelehnt an Nothings Signalrot — nur für Akzente/Alarme, nie dekorativ</p>
+  <p style="margin-top:8px; font-size:11px;">Hinweis: Farbe allein ist nicht markenrechtlich geschützt — es handelt sich um eine eigene, inspirierte Umsetzung, keine Reproduktion von Nothings Markenmaterial.</p>
+</div>
+
+<script>
+function toggleTheme() {
+  var isDark = document.body.getAttribute('data-theme') === 'dark';
+  document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('theme-label').textContent = isDark ? 'Ansicht: hell' : 'Ansicht: dunkel';
+}
+</script>
+
+</body>
+</html>
