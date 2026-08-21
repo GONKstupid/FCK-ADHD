@@ -4,4 +4,5 @@ dist
 android/app/build
 .capacitor
 *.apk
+*.msi
 .env
