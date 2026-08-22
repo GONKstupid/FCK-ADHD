@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { Routine, RoutineInstance } from '../../core/models';
-import { getAllRoutines, getActiveInstance } from '../../services/routineService';
+import {
+  getAllRoutines,
+  getActiveInstance,
+} from '../../services/routineService';
 import { seedMVPRoutine } from '../../data/seed';
+import GlyphStrip from '../components/GlyphStrip';
 
 interface Props {
   onNavigate: (screen: string, params?: Record<string, string>) => void;
@@ -20,14 +24,23 @@ function formatDeadline(deadline: number | null): string {
   return `in ${hrs}h ${remMins}m`;
 }
 
-const stateBadge: Record<RoutineInstance['state'], { label: string; className: string }> = {
+const stateBadge: Record<
+  RoutineInstance['state'],
+  { label: string; className: string }
+> = {
   IDLE: { label: 'Bereit', className: 'badge--idle' },
   WAITING: { label: 'Wartet', className: 'badge--waiting' },
   REMINDING: { label: 'Erinnert!', className: 'badge--reminding' },
 };
 
-export default function DashboardScreen({ onNavigate, onThemeToggle, isDark }: Props) {
-  const [routines, setRoutines] = useState<(Routine & { instance?: RoutineInstance })[]>([]);
+export default function DashboardScreen({
+  onNavigate,
+  onThemeToggle,
+  isDark,
+}: Props) {
+  const [routines, setRoutines] = useState<
+    (Routine & { instance?: RoutineInstance })[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -45,8 +58,11 @@ export default function DashboardScreen({ onNavigate, onThemeToggle, isDark }: P
   }
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, 5000);
+    const tick = () => {
+      void load();
+    };
+    tick();
+    const id = setInterval(tick, 5000);
     return () => clearInterval(id);
   }, []);
 
@@ -61,14 +77,28 @@ export default function DashboardScreen({ onNavigate, onThemeToggle, isDark }: P
           <h1 className="header__title">FCK ADHD</h1>
           <span className="header__sub">reminder system</span>
         </div>
-        <button
-          className="btn btn--ghost"
-          onClick={onThemeToggle}
-          title={isDark ? 'Light mode' : 'Dark mode'}
-        >
-          {isDark ? '☀' : '☾'}
-        </button>
+        <div className="header__actions">
+          <button
+            className="btn btn--ghost"
+            onClick={() => onNavigate('Settings')}
+            title="Einstellungen"
+            aria-label="Einstellungen"
+          >
+            ⚙
+          </button>
+          <button
+            className="btn btn--ghost"
+            onClick={onThemeToggle}
+            title={isDark ? 'Helles Design' : 'Dunkles Design'}
+            aria-label={isDark ? 'Helles Design' : 'Dunkles Design'}
+          >
+            {isDark ? '☀' : '☾'}
+          </button>
+        </div>
       </header>
+
+      {/* ── Glyph-Streifen (Signatur-Element) ── */}
+      <GlyphStrip />
 
       {/* ── Routine list ── */}
       <main className="main">
@@ -89,9 +119,7 @@ export default function DashboardScreen({ onNavigate, onThemeToggle, isDark }: P
           <div className="card-list">
             {routines.map((r) => {
               const inst = r.instance;
-              const badge = inst
-                ? stateBadge[inst.state]
-                : stateBadge['IDLE'];
+              const badge = inst ? stateBadge[inst.state] : stateBadge['IDLE'];
               return (
                 <div
                   key={r.id}
@@ -119,9 +147,7 @@ export default function DashboardScreen({ onNavigate, onThemeToggle, isDark }: P
                       </span>
                     )}
                   </div>
-                  <div className="card__qr-hint">
-                    QR-Code anzeigen →
-                  </div>
+                  <div className="card__qr-hint">QR-Code anzeigen →</div>
                 </div>
               );
             })}
@@ -131,10 +157,7 @@ export default function DashboardScreen({ onNavigate, onThemeToggle, isDark }: P
 
       {/* ── Scan button ── */}
       <div className="scan-bar">
-        <button
-          className="btn btn--scan"
-          onClick={() => onNavigate('Scanner')}
-        >
+        <button className="btn btn--scan" onClick={() => onNavigate('Scanner')}>
           <span className="btn--scan__icon">⊞</span>
           <span className="btn--scan__label">QR Scannen</span>
         </button>

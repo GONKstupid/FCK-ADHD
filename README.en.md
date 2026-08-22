@@ -69,13 +69,13 @@ src/
 │   ├── db.ts
 │   └── seed.ts
 ├── services/        # Business logic & native bridges
+│   ├── alarmController.ts    # Central alarm orchestration
 │   ├── blockerBridge.ts      # Capacitor plugin bridge
 │   ├── escalationService.ts  # Escalation logic
 │   ├── healthCheck.ts        # Alarm verification
 │   ├── qrGenerator.ts        # QR code generation
 │   ├── routineService.ts     # Routine CRUD
-│   ├── scannerService.ts     # ML Kit scanner
-│   └── timerService.ts       # Native AlarmManager + web fallback
+│   └── scannerService.ts     # ML Kit scanner
 ├── ui/
 │   ├── components/  # Reusable UI building blocks
 │   │   ├── HoldButton.tsx    # Hold gesture component

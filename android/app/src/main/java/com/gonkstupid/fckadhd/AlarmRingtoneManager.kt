@@ -31,20 +31,28 @@ class AlarmRingtoneManager(private val context: Context) {
     }
 
     private var mediaPlayer: MediaPlayer? = null
+    private var escalationPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
     private var isPlaying = false
+    private var currentEscalationUri: Uri? = null
 
     // ── Ringtone ──────────────────────────────────────────────────────────────
 
     /**
      * Starts playing the alarm ringtone and vibration pattern.
      * @param ringtoneUri Custom ringtone URI, or null to use the system default alarm.
+     * @param escalationUri Optional escalation ringtone played ADDITIVELY on a
+     *                      second MediaPlayer alongside the base alarm sound.
      */
-    fun start(ringtoneUri: Uri? = null) {
+    fun start(ringtoneUri: Uri? = null, escalationUri: Uri? = null) {
         if (isPlaying) return
         isPlaying = true
 
         startRingtone(ringtoneUri)
+        escalationUri?.let {
+            currentEscalationUri = it
+            startEscalationRingtone(it)
+        }
         startVibration()
     }
 
@@ -56,10 +64,25 @@ class AlarmRingtoneManager(private val context: Context) {
         isPlaying = false
 
         stopRingtone()
+        stopEscalationRingtone()
         stopVibration()
     }
 
     fun isCurrentlyPlaying(): Boolean = isPlaying
+
+    /**
+     * Starts the additive escalation ringtone on the second MediaPlayer.
+     * Called from AlarmActivity.onNewIntent() when a repeat intent carries a
+     * ringtoneUri extra while the alarm screen is already alive.
+     * Guarded against double-start: if the same URI is already playing,
+     * this is a no-op.
+     */
+    fun startEscalation(uri: Uri) {
+        if (currentEscalationUri == uri && escalationPlayer != null) return
+        stopEscalationRingtone()
+        currentEscalationUri = uri
+        startEscalationRingtone(uri)
+    }
 
     // ── Private: Ringtone ─────────────────────────────────────────────────────
 
@@ -105,6 +128,32 @@ class AlarmRingtoneManager(private val context: Context) {
         }
     }
 
+    /**
+     * Plays the escalation ringtone on a dedicated second MediaPlayer,
+     * ADDITIVELY to the base alarm sound. Lifecycle is bound to this manager
+     * (released in [stop], which AlarmActivity calls from onDestroy).
+     */
+    private fun startEscalationRingtone(uri: Uri) {
+        try {
+            escalationPlayer = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                setDataSource(context, uri)
+                isLooping = true
+                prepare()
+                start()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start escalation ringtone", e)
+            escalationPlayer?.release()
+            escalationPlayer = null
+        }
+    }
+
     private fun stopRingtone() {
         mediaPlayer?.let {
             try {
@@ -115,6 +164,19 @@ class AlarmRingtoneManager(private val context: Context) {
             }
         }
         mediaPlayer = null
+    }
+
+    private fun stopEscalationRingtone() {
+        escalationPlayer?.let {
+            try {
+                if (it.isPlaying) it.stop()
+                it.release()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error stopping escalation MediaPlayer", e)
+            }
+        }
+        escalationPlayer = null
+        currentEscalationUri = null
     }
 
     private fun getDefaultAlarmUri(): Uri {

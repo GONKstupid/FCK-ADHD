@@ -82,11 +82,15 @@ class AlarmForegroundService : Service() {
     }
 
     private fun buildNotification(label: String): Notification {
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        // Intent straight to the alarm screen so tapping (or the system's
+        // full-screen launch) lands on AlarmActivity, not the web view.
+        val alarmIntent = Intent(this, AlarmActivity::class.java).apply {
+            putExtra("label", label)
+        }
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
-            launchIntent,
+            alarmIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
@@ -96,16 +100,24 @@ class AlarmForegroundService : Service() {
             .setContentText(label)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(false)
             .setContentIntent(pendingIntent)
+            // Full-screen intent: lets the system launch AlarmActivity directly
+            // when the device is locked or the USE_FULL_SCREEN_INTENT quota
+            // applies (requires android.permission.USE_FULL_SCREEN_INTENT).
+            .setFullScreenIntent(pendingIntent, true)
             .build()
     }
 
     // ── Wake lock ─────────────────────────────────────────────────────────────
 
     private fun acquireWakeLock() {
-        if (wakeLock != null) return
+        // Only skip when the lock is still actually held. The 10-minute timeout
+        // auto-releases it, so on the endless repeat chain the lock must be
+        // (re)created/acquired again — otherwise audio stalls after expiry.
+        if (wakeLock?.isHeld == true) return
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(

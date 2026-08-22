@@ -1,6 +1,18 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import type { PluginListenerHandle } from '@capacitor/core';
 
 // ─── Native Plugin Interface ──────────────────────────────────────────────────
+
+/** Payload of the `alarmFired` event pushed by the native side. */
+export interface AlarmFiredEvent {
+  instanceId: string;
+  repeatCount: number;
+}
+
+export interface Ringtone {
+  uri: string;
+  title: string;
+}
 
 interface BlockerPluginInterface {
   showAlarm(options: { label: string; repeatCount: number }): Promise<void>;
@@ -10,12 +22,36 @@ interface BlockerPluginInterface {
   scheduleExactAlarm(options: {
     instanceId: string;
     deadlineMs: number;
-  }): Promise<void>;
+    /** Optional label persisted natively (shown on the alarm screen). */
+    label?: string;
+    /**
+     * Optional repeat counter of a recovered/restarted alarm chain.
+     * When absent, native preserves the existing count.
+     */
+    repeatCount?: number;
+  }): Promise<{ scheduled: boolean }>;
   cancelAlarm(options: { instanceId: string }): Promise<void>;
   isAlarmScheduled(options: {
     instanceId: string;
   }): Promise<{ scheduled: boolean }>;
   requestBatteryOptimizationExemption(): Promise<void>;
+
+  // ── Permissions & settings ──
+  hasExactAlarmPermission(): Promise<{ granted: boolean }>;
+  canUseFullScreenIntent(): Promise<{ granted: boolean }>;
+  openExactAlarmSettings(): Promise<void>;
+  openFullScreenIntentSettings(): Promise<void>;
+
+  // ── Escalation ringtone ──
+  listRingtones(): Promise<{ ringtones: Ringtone[] }>;
+  setEscalationRingtone(options: { uri: string }): Promise<void>;
+  getEscalationRingtone(): Promise<{ uri: string | null }>;
+
+  // ── Event channel (native → web) ──
+  addListener(
+    eventName: 'alarmFired',
+    listenerFunc: (event: AlarmFiredEvent) => void,
+  ): Promise<PluginListenerHandle>;
 }
 
 // ─── Bridge ───────────────────────────────────────────────────────────────────
@@ -68,23 +104,44 @@ export async function releaseAudioFocus(): Promise<void> {
 
 /**
  * Schedules an exact alarm via AlarmManager (setAlarmClock on API 31+).
+ * The native side auto-chains a 60s repeat once the alarm fires —
+ * web must NOT schedule repeats itself.
+ * `repeatCount` is optional: pass it only when restarting/recovering an
+ * existing alarm chain so native preserves the current count.
+ * Failures are logged and swallowed (scheduling is best-effort).
  * No-op on web.
  */
 export async function scheduleExactAlarm(
   instanceId: string,
   deadlineMs: number,
+  label?: string,
+  repeatCount?: number,
 ): Promise<void> {
   if (!isNative()) return;
-  await BlockerNative.scheduleExactAlarm({ instanceId, deadlineMs });
+  try {
+    await BlockerNative.scheduleExactAlarm({
+      instanceId,
+      deadlineMs,
+      label,
+      repeatCount,
+    });
+  } catch (err) {
+    console.error('[blockerBridge] scheduleExactAlarm failed:', err);
+  }
 }
 
 /**
- * Cancels a previously scheduled exact alarm.
+ * Cancels a previously scheduled exact alarm — also stops an active
+ * repeat chain and clears native metadata.
  * No-op on web.
  */
 export async function cancelAlarm(instanceId: string): Promise<void> {
   if (!isNative()) return;
-  await BlockerNative.cancelAlarm({ instanceId });
+  try {
+    await BlockerNative.cancelAlarm({ instanceId });
+  } catch (err) {
+    console.error('[blockerBridge] cancelAlarm failed:', err);
+  }
 }
 
 /**
@@ -107,20 +164,92 @@ export async function requestBatteryOptimizationExemption(): Promise<void> {
   await BlockerNative.requestBatteryOptimizationExemption();
 }
 
+// ─── Permissions & settings ───────────────────────────────────────────────────
+
 /**
- * Plays the escalation ringtone.
- * Native implementation was removed; this is a no-op on both web and native.
- * Kept as an exported function so escalationService imports don't break.
+ * Whether the SCHEDULE_EXACT_ALARM / USE_EXACT_ALARM permission is granted.
+ * On web, treated as granted.
  */
-export async function playEscalationRingtone(): Promise<void> {
-  // Intentionally a no-op – native side removed.
-  // TODO: implement Web Audio API beep fallback if needed.
+export async function hasExactAlarmPermission(): Promise<{
+  granted: boolean;
+}> {
+  if (!isNative()) return { granted: true };
+  return BlockerNative.hasExactAlarmPermission();
 }
 
 /**
- * Stops the escalation ringtone.
- * Native implementation was removed; this is a no-op on both web and native.
+ * Whether full-screen intents are allowed (required for the alarm
+ * to appear over the lock screen). On web, treated as granted.
  */
-export async function stopEscalationRingtone(): Promise<void> {
-  // Intentionally a no-op – native side removed.
+export async function canUseFullScreenIntent(): Promise<{ granted: boolean }> {
+  if (!isNative()) return { granted: true };
+  return BlockerNative.canUseFullScreenIntent();
+}
+
+/**
+ * Opens the system settings page for exact alarms.
+ * No-op on web.
+ */
+export async function openExactAlarmSettings(): Promise<void> {
+  if (!isNative()) return;
+  await BlockerNative.openExactAlarmSettings();
+}
+
+/**
+ * Opens the system settings page for full-screen intents.
+ * No-op on web.
+ */
+export async function openFullScreenIntentSettings(): Promise<void> {
+  if (!isNative()) return;
+  await BlockerNative.openFullScreenIntentSettings();
+}
+
+// ─── Escalation ringtone ──────────────────────────────────────────────────────
+
+/**
+ * Lists available system ringtones for the escalation ring.
+ * Returns an empty list on web.
+ */
+export async function listRingtones(): Promise<{ ringtones: Ringtone[] }> {
+  if (!isNative()) return { ringtones: [] };
+  return BlockerNative.listRingtones();
+}
+
+/**
+ * Persists the escalation ringtone choice natively.
+ * No-op on web.
+ */
+export async function setEscalationRingtone(uri: string): Promise<void> {
+  if (!isNative()) return;
+  await BlockerNative.setEscalationRingtone({ uri });
+}
+
+/**
+ * Reads the currently persisted escalation ringtone.
+ * Returns { uri: null } on web.
+ */
+export async function getEscalationRingtone(): Promise<{
+  uri: string | null;
+}> {
+  if (!isNative()) return { uri: null };
+  return BlockerNative.getEscalationRingtone();
+}
+
+// ─── Event channel (native → web) ─────────────────────────────────────────────
+
+/**
+ * Subscribes to the native `alarmFired` event. The native side runs the
+ * endless 60s repeat chain itself (each fire auto-schedules the next) and
+ * shows AlarmActivity on its own — this listener only lets the web layer
+ * update its state machine / UI.
+ * Returns an unsubscribe function. No-op on web.
+ */
+export async function addAlarmFiredListener(
+  cb: (event: AlarmFiredEvent) => void,
+): Promise<() => void> {
+  if (!isNative()) return () => {};
+  const handle = await BlockerNative.addListener('alarmFired', cb);
+  return () => {
+    void handle.remove();
+  };
 }

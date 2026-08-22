@@ -1,4 +1,5 @@
 import type { RoutineInstance, StateMachineEvent, Step } from './models';
+import { MAX_EXTENSIONS } from './constants';
 
 /**
  * Derives the deadline for a given step starting from `now`.
@@ -47,7 +48,11 @@ export function transition(
 
     // ── User confirms (scans QR again) → advance or complete ─────────────────
     case 'SCAN_CONFIRM': {
-      if (instance.state !== 'REMINDING') return instance;
+      // Allowed from REMINDING (alarm ringing) and WAITING (user finished the
+      // step faster than planned — a scan during WAITING ends it immediately).
+      if (instance.state !== 'REMINDING' && instance.state !== 'WAITING') {
+        return instance;
+      }
 
       const nextIndex = instance.currentStepIndex + 1;
 
@@ -86,6 +91,7 @@ export function transition(
     // ── User extends the timer ───────────────────────────────────────────────
     case 'EXTEND': {
       if (instance.state !== 'REMINDING') return instance;
+      if (instance.extensionsUsed >= MAX_EXTENSIONS) return instance; // limit reached
       return {
         ...instance,
         state: 'WAITING',

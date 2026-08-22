@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getRoutineById } from '../../services/routineService';
 import { generateQRSvg } from '../../services/qrGenerator';
 import type { Routine } from '../../core/models';
+import GlyphStrip from '../components/GlyphStrip';
 
 interface Props {
   routineId: string;
@@ -14,7 +15,7 @@ export default function QRExportScreen({ routineId, onBack }: Props) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       const r = await getRoutineById(routineId);
       if (r) {
         setRoutine(r);
@@ -30,10 +31,14 @@ export default function QRExportScreen({ routineId, onBack }: Props) {
       <div className="screen">
         <div className="dot-grid-bg" aria-hidden />
         <header className="header">
-          <button className="btn btn--ghost" onClick={onBack}>← Zurück</button>
+          <button className="btn btn--ghost" onClick={onBack}>
+            ← Zurück
+          </button>
           <h1 className="header__title header__title--sm">QR-Code</h1>
           <div style={{ width: '3rem' }} />
         </header>
+        {/* ── Glyph-Streifen (Signatur-Element) ── */}
+        <GlyphStrip />
         <main className="main qr-main">
           <div className="spinner" />
         </main>
@@ -46,10 +51,14 @@ export default function QRExportScreen({ routineId, onBack }: Props) {
       <div className="screen">
         <div className="dot-grid-bg" aria-hidden />
         <header className="header">
-          <button className="btn btn--ghost" onClick={onBack}>← Zurück</button>
+          <button className="btn btn--ghost" onClick={onBack}>
+            ← Zurück
+          </button>
           <h1 className="header__title header__title--sm">QR-Code</h1>
           <div style={{ width: '3rem' }} />
         </header>
+        {/* ── Glyph-Streifen (Signatur-Element) ── */}
+        <GlyphStrip />
         <main className="main qr-main">
           <p className="empty-state__text">Routine nicht gefunden.</p>
         </main>
@@ -62,10 +71,15 @@ export default function QRExportScreen({ routineId, onBack }: Props) {
       <div className="dot-grid-bg" aria-hidden />
 
       <header className="header">
-        <button className="btn btn--ghost" onClick={onBack}>← Zurück</button>
+        <button className="btn btn--ghost" onClick={onBack}>
+          ← Zurück
+        </button>
         <h1 className="header__title header__title--sm">QR-Code</h1>
         <div style={{ width: '3rem' }} />
       </header>
+
+      {/* ── Glyph-Streifen (Signatur-Element) ── */}
+      <GlyphStrip />
 
       <main className="main qr-main">
         <div className="qr-card">
@@ -83,17 +97,16 @@ export default function QRExportScreen({ routineId, onBack }: Props) {
           <div className="qr-instructions__icon">⊕</div>
           <p className="qr-instructions__title">Anleitung</p>
           <p className="qr-instructions__text">
-            Klebe diesen QR-Code an den Ort, den du überwachen möchtest — z.B. an den Herd, die Dunstabzugshaube oder den Backofen.
+            Klebe diesen QR-Code an den Ort, den du überwachen möchtest — z.B.
+            an den Herd, die Dunstabzugshaube oder den Backofen.
           </p>
           <p className="qr-instructions__text qr-instructions__text--hint">
-            Scanne den Code, wenn du das Gerät einschaltest. Die App erinnert dich dann automatisch ans Ausschalten.
+            Scanne den Code, wenn du das Gerät einschaltest. Die App erinnert
+            dich dann automatisch ans Ausschalten.
           </p>
         </div>
 
-        <button
-          className="btn btn--secondary"
-          onClick={() => window.print()}
-        >
+        <button className="btn btn--secondary" onClick={() => window.print()}>
           Drucken
         </button>
       </main>

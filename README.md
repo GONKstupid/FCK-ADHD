@@ -55,6 +55,83 @@ npx cap open android
 | `npm run lint` | ESLint |
 | `npx cap sync` | Web-Assets → Android kopieren |
 | `npx cap open android` | Android Studio öffnen |
+| `npm run dist:android` | Signierte Release-APK bauen (Sideload) |
+
+## Release-APK bauen & installieren (Sideload)
+
+Für den privaten Gebrauch wird eine **signierte Release-APK** gebaut und direkt aufs
+Handy gespielt (Sideload) – ohne Play Store.
+
+### Voraussetzungen
+- JDK 17+ (Temurin) und Android SDK (siehe [Quick Start](#quick-start))
+- Einmalig angelegter Release-Keystore (siehe unten) – **wird nicht mit committet**
+
+### Keystore (einmalig anlegen)
+Der Keystore liegt unter `android/app/fckadhd-release.keystore`, die Zugangsdaten in der
+gitignore­ten Datei `android/keystore.properties`. Falls beides fehlt (z.B. auf einem
+frischen Rechner), einmalig neu erzeugen:
+
+```bash
+keytool -genkeypair -storetype JKS -keystore android/app/fckadhd-release.keystore \
+  -alias fckadhd -keyalg RSA -keysize 2048 -validity 10000 \
+  -storepass <STORE-PASSWORT> -keypass <KEY-PASSWORT> \
+  -dname "CN=FCK-ADHD, OU=Private, O=gonkstupid, C=DE"
+```
+
+Anschließend `android/keystore.properties` anlegen:
+
+```properties
+RELEASE_STORE_FILE=fckadhd-release.keystore
+RELEASE_STORE_PASSWORD=<STORE-PASSWORT>
+RELEASE_KEY_ALIAS=fckadhd
+RELEASE_KEY_PASSWORD=<KEY-PASSWORT>
+```
+
+> ⚠️ **WICHTIG – Keystore sichern!**
+> Der Keystore + die Passwörter sind die **einzige** Möglichkeit, Updates für diese App
+> zu signieren. **Verlust = keine Updates mehr möglich** (die App müsste deinstalliert und
+> unter neuer Signatur neu installiert werden). Keystore-Datei **und** Passwörter sicher
+> aufbewahren (z.B. Passwort-Manager + Backup-Kopie), aber **niemals committen**.
+
+### Release-APK bauen
+
+```bash
+npm run dist:android
+```
+
+Das Skript führt automatisch aus: `npm run build` (TypeScript + Vite) → `cap sync android`
+(Web-Assets aktualisieren) → `gradlew.bat assembleRelease` (signierte APK erzeugen).
+
+Die fertige APK liegt danach unter:
+
+```
+android/app/build/outputs/apk/release/app-release.apk
+```
+
+### Auf dem Gerät installieren
+
+**Variante A – per ADB (USB-Debugging aktiviert):**
+
+```bash
+adb install -r android/app/build/outputs/apk/release/app-release.apk
+```
+
+**Variante B – per Dateiübertragung:**
+Die APK-Datei aufs Handy kopieren (z.B. USB, Cloud oder Messenger) und dort antippen.
+Android fragt beim ersten Mal, ob „Unbekannte Apps installieren“ erlaubt werden soll –
+dies einmalig für die jeweilige Datei-App bestätigen.
+
+### Berechtigungen beim ersten Start
+Beim ersten Start bzw. bei der ersten Nutzung fragt die App folgende Berechtigungen ab,
+die für die Zuverlässigkeit der Alarme benötigt werden:
+
+- **Kamera** – zum Scannen der QR-Codes
+- **Exakte Alarme / Wecker** – damit Timer auch bei App-Kill & Reboot pünktlich klingeln
+- **Benachrichtigungen / Vollbild-Alarm** – für den Fullscreen-Alarm über dem Lock-Screen
+- **Akku-Optimierung ignorieren** *(empfohlen)* – damit Android die Alarme im Hintergrund
+  nicht drosselt
+
+Ohne diese Freigaben kann es passieren, dass Alarme nicht oder verspätet ausgelöst werden.
 
 ## Projektstruktur
 
@@ -69,13 +146,13 @@ src/
 │   ├── db.ts
 │   └── seed.ts
 ├── services/        # Business-Logik & Native-Bridges
+│   ├── alarmController.ts    # Zentrale Alarm-Orchestrierung
 │   ├── blockerBridge.ts      # Capacitor Plugin Bridge
 │   ├── escalationService.ts  # Eskalations-Logik
 │   ├── healthCheck.ts        # Alarm-Verifizierung
 │   ├── qrGenerator.ts        # QR-Code Generierung
 │   ├── routineService.ts     # Routine-CRUD
-│   ├── scannerService.ts     # ML Kit Scanner
-│   └── timerService.ts       # Native AlarmManager + Web Fallback
+│   └── scannerService.ts     # ML Kit Scanner
 ├── ui/
 │   ├── components/  # Wiederverwendbare UI-Bausteine
 │   │   ├── HoldButton.tsx    # Hold-Geste Komponente

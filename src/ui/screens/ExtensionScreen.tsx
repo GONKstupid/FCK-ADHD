@@ -1,23 +1,45 @@
 import { useCallback, useState } from 'react';
 import MathPuzzle from '../components/MathPuzzle';
 import HoldButton from '../components/HoldButton';
+import { handleExtend } from '../../services/alarmController';
+import {
+  EXTENSION_MIN_MINUTES,
+  EXTENSION_MAX_MINUTES,
+} from '../../core/constants';
 
 // ─── Extension screen: multi-step flow before granting snooze ───────────────────
 
 type Step = 'puzzle' | 'hold' | 'duration';
 
-const DURATION_OPTIONS = [5, 10, 15, 20, 30]; // minutes
+// Spans the full allowed range (EXTENSION_MIN_MINUTES … EXTENSION_MAX_MINUTES)
+const DURATION_OPTIONS = [
+  EXTENSION_MIN_MINUTES,
+  10,
+  15,
+  20,
+  30,
+  45,
+  EXTENSION_MAX_MINUTES,
+];
 
 interface Props {
-  /** Dispatches the EXTEND event and reschedules the alarm */
-  onExtend: (durationMinutes: number) => void;
+  /** The ringing routine instance to extend. */
+  instanceId: string;
+  /** Called after a successful extension (navigate back). */
+  onDone: () => void;
   /** Go back to alarm / dashboard */
   onCancel: () => void;
 }
 
-export default function ExtensionScreen({ onExtend, onCancel }: Props) {
+export default function ExtensionScreen({
+  instanceId,
+  onDone,
+  onCancel,
+}: Props) {
   const [step, setStep] = useState<Step>('puzzle');
   const [duration, setDuration] = useState(10);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   const stepIndex = step === 'puzzle' ? 1 : step === 'hold' ? 2 : 3;
 
@@ -29,9 +51,19 @@ export default function ExtensionScreen({ onExtend, onCancel }: Props) {
     setStep('duration');
   }, []);
 
-  const handleConfirm = useCallback(() => {
-    onExtend(duration);
-  }, [onExtend, duration]);
+  const handleConfirm = useCallback(async () => {
+    setBusy(true);
+    setError('');
+    const updated = await handleExtend(instanceId, duration);
+    setBusy(false);
+    if (updated && updated.state === 'WAITING') {
+      onDone();
+    } else {
+      setError(
+        'Verlängern nicht möglich – Limit erreicht oder Alarm nicht mehr aktiv.',
+      );
+    }
+  }, [instanceId, duration, onDone]);
 
   return (
     <div className="extension-screen">
@@ -43,9 +75,7 @@ export default function ExtensionScreen({ onExtend, onCancel }: Props) {
           ← Zurück
         </button>
         <h1 className="header__title header__title--sm">Verlängern</h1>
-        <span className="extension-screen__step">
-          {stepIndex}/3
-        </span>
+        <span className="extension-screen__step">{stepIndex}/3</span>
       </header>
 
       {/* ── Progress dots ── */}
@@ -102,19 +132,25 @@ export default function ExtensionScreen({ onExtend, onCancel }: Props) {
                 min={0}
                 max={DURATION_OPTIONS.length - 1}
                 value={DURATION_OPTIONS.indexOf(duration)}
-                onChange={(e) => setDuration(DURATION_OPTIONS[parseInt(e.target.value, 10)])}
+                onChange={(e) =>
+                  setDuration(DURATION_OPTIONS[parseInt(e.target.value, 10)])
+                }
               />
-              <div className="extension-screen__value">
-                {duration} Minuten
-              </div>
+              <div className="extension-screen__value">{duration} Minuten</div>
             </div>
 
             <button
               className="btn btn--scan extension-screen__confirm"
-              onClick={handleConfirm}
+              onClick={() => void handleConfirm()}
+              disabled={busy}
             >
-              Verlängern für {duration} Min
+              {busy ? 'Wird verlängert…' : `Verlängern für ${duration} Min`}
             </button>
+            {error && (
+              <p className="scan-feedback scan-feedback--error extension-screen__error">
+                {error}
+              </p>
+            )}
           </>
         )}
       </main>

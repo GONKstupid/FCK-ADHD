@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
+import { handleScanResult } from '../../services/alarmController';
 import {
-  getRoutineByQrCodeId,
-  createInstance,
-  getActiveInstance,
-  applyEvent,
-} from '../../services/routineService';
-import { startScan, stopScan, resetDebounce, requestCameraPermission } from '../../services/scannerService';
+  startScan,
+  stopScan,
+  resetDebounce,
+  requestCameraPermission,
+} from '../../services/scannerService';
+import GlyphStrip from '../components/GlyphStrip';
 
 interface Props {
   onBack: () => void;
@@ -19,7 +20,7 @@ export default function ScannerScreen({ onBack }: Props) {
   const [permissionGranted, setPermissionGranted] = useState(false);
 
   useEffect(() => {
-    requestCameraPermission().then(setPermissionGranted);
+    void requestCameraPermission().then(setPermissionGranted);
     return () => {
       stopScan();
       resetDebounce();
@@ -33,49 +34,11 @@ export default function ScannerScreen({ onBack }: Props) {
     try {
       const qrCodeId = await startScan();
 
-      const routine = await getRoutineByQrCodeId(qrCodeId);
-      if (!routine) {
-        setStatus('error');
-        setMessage('Unbekannter QR-Code. Keine Routine gefunden.');
-        return;
-      }
-
-      const active = await getActiveInstance(routine.id);
-
-      if (active) {
-        if (active.state === 'REMINDING') {
-          const updated = await applyEvent(active.id, { type: 'SCAN_CONFIRM' });
-          if (updated) {
-            if (updated.state === 'IDLE') {
-              setStatus('success');
-              setMessage(`✓ "${routine.name}" abgeschlossen!`);
-            } else {
-              setStatus('success');
-              setMessage(`✓ "${routine.name}" bestätigt. Nächster Schritt…`);
-            }
-          } else {
-            throw new Error('applyEvent returned null');
-          }
-          return;
-        }
-
-        if (active.state === 'WAITING') {
-          setStatus('error');
-          setMessage(`"${routine.name}" wartet noch auf den Timer.`);
-          return;
-        }
-      }
-
-      // No active instance or IDLE — start a new one
-      const instanceId = await createInstance(routine.id);
-      const updated = await applyEvent(instanceId, { type: 'SCAN_START' });
-
-      if (updated) {
-        setStatus('success');
-        setMessage(`✓ "${routine.name}" gestartet!`);
-      } else {
-        throw new Error('Failed to start routine');
-      }
+      // All routine/instance logic + native side effects live in the
+      // alarm controller — the screen only renders the outcome.
+      const result = await handleScanResult(qrCodeId);
+      setStatus(result.status === 'unknown' ? 'error' : 'success');
+      setMessage(result.message);
     } catch (err) {
       if (err instanceof Error && err.message === 'DEBOUNCED') {
         setStatus('error');
@@ -104,6 +67,9 @@ export default function ScannerScreen({ onBack }: Props) {
         <div style={{ width: '3rem' }} />
       </header>
 
+      {/* ── Glyph-Streifen (Signatur-Element) ── */}
+      <GlyphStrip />
+
       <main className="main scanner-main">
         {/* ── Viewfinder ── */}
         <div className="viewfinder">
@@ -112,9 +78,7 @@ export default function ScannerScreen({ onBack }: Props) {
             <div className="viewfinder__corner viewfinder__corner--tr" />
             <div className="viewfinder__corner viewfinder__corner--bl" />
             <div className="viewfinder__corner viewfinder__corner--br" />
-            {status === 'scanning' && (
-              <div className="viewfinder__scanline" />
-            )}
+            {status === 'scanning' && <div className="viewfinder__scanline" />}
             <div className="viewfinder__center">
               {status === 'scanning' ? (
                 <div className="spinner" />
@@ -142,7 +106,7 @@ export default function ScannerScreen({ onBack }: Props) {
         {/* ── Action ── */}
         <button
           className="btn btn--scan"
-          onClick={handleScan}
+          onClick={() => void handleScan()}
           disabled={status === 'scanning'}
         >
           <span className="btn--scan__icon">⊞</span>

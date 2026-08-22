@@ -132,9 +132,39 @@ describe('State Machine – transition()', () => {
       expect(result.state).toBe('IDLE');
     });
 
-    it('is a no-op from WAITING state', () => {
-      const result = transition(makeWaitingInstance(), { type: 'SCAN_CONFIRM' }, steps, NOW);
+    it('completes the current step early from WAITING state (user finished faster)', () => {
+      // makeWaitingInstance() sits on step 1 (the last step) — confirm advances past it
+      const instance = makeWaitingInstance();
+      const result = transition(instance, { type: 'SCAN_CONFIRM' }, steps, NOW);
+      expect(result.state).toBe('IDLE');
+      expect(result.completedAt).toBe(NOW);
+      expect(result.currentStepIndex).toBe(2);
+    });
+
+    it('advances from WAITING to the next step with a new deadline', () => {
+      const instance = { ...makeWaitingInstance(0), deadline: NOW + 5 * 60_000 };
+      const result = transition(instance, { type: 'SCAN_CONFIRM' }, steps, NOW);
       expect(result.state).toBe('WAITING');
+      expect(result.currentStepIndex).toBe(1);
+      expect(result.deadline).toBe(NOW + 30 * 60_000);
+      expect(result.repeatCount).toBe(0);
+    });
+
+    it('completes the instance when SCAN_CONFIRM fires during WAITING on the last step', () => {
+      const singleStep: Step[] = [
+        { id: 'only', label: 'Only step', type: 'delayed_reminder', delayMinutes: 15 },
+      ];
+      const instance: RoutineInstance = {
+        ...makeIdleInstance(),
+        state: 'WAITING',
+        currentStepIndex: 0,
+        deadline: NOW + 15 * 60_000,
+      };
+      const result = transition(instance, { type: 'SCAN_CONFIRM' }, singleStep, NOW);
+      expect(result.state).toBe('IDLE');
+      expect(result.completedAt).toBe(NOW);
+      expect(result.deadline).toBeNull();
+      expect(result.currentStepIndex).toBe(1);
     });
   });
 
@@ -152,7 +182,20 @@ describe('State Machine – transition()', () => {
       expect(result.extensionsUsed).toBe(1);
     });
 
-    it('increments extensionsUsed on multiple extends', () => {
+    it('still allows the 3rd extend (boundary — MAX_EXTENSIONS = 3)', () => {
+      const instance = { ...makeRemindingInstance(), extensionsUsed: 2 };
+      const result = transition(
+        instance,
+        { type: 'EXTEND', durationMinutes: 5 },
+        steps,
+        NOW,
+      );
+      expect(result.state).toBe('WAITING');
+      expect(result.extensionsUsed).toBe(3);
+      expect(result.deadline).toBe(NOW + 5 * 60_000);
+    });
+
+    it('is a no-op on the 4th extend (MAX_EXTENSIONS reached)', () => {
       const instance = { ...makeRemindingInstance(), extensionsUsed: 3 };
       const result = transition(
         instance,
@@ -160,7 +203,8 @@ describe('State Machine – transition()', () => {
         steps,
         NOW,
       );
-      expect(result.extensionsUsed).toBe(4);
+      expect(result).toBe(instance); // same reference — no change
+      expect(result.extensionsUsed).toBe(3);
     });
 
     it('is a no-op from IDLE state', () => {

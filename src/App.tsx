@@ -3,10 +3,17 @@ import DashboardScreen from './ui/screens/DashboardScreen';
 import ScannerScreen from './ui/screens/ScannerScreen';
 import QRExportScreen from './ui/screens/QRExportScreen';
 import AlarmScreen from './ui/screens/AlarmScreen';
+import ExtensionScreen from './ui/screens/ExtensionScreen';
+import SettingsScreen from './ui/screens/SettingsScreen';
 import OnboardingScreen, {
   isOnboardingComplete,
 } from './ui/screens/OnboardingScreen';
 import { startHealthCheck, stopHealthCheck } from './services/healthCheck';
+import {
+  startAlarmFiredListener,
+  stopAlarmFiredListener,
+} from './services/alarmController';
+import { getRoutineById } from './services/routineService';
 
 // ─── Simple state-based router ──────────────────────────────────────────────────
 
@@ -14,7 +21,15 @@ type Route =
   | { name: 'Dashboard' }
   | { name: 'Scanner' }
   | { name: 'QRExport'; routineId: string }
-  | { name: 'Alarm'; routineName: string; repeatCount: number };
+  | {
+      name: 'Alarm';
+      routineName: string;
+      repeatCount: number;
+      instanceId: string;
+      extensionsUsed: number;
+    }
+  | { name: 'Extension'; instanceId: string }
+  | { name: 'Settings' };
 
 function App() {
   const [route, setRoute] = useState<Route>({ name: 'Dashboard' });
@@ -25,13 +40,35 @@ function App() {
 
   // ── Onboarding check ────────────────────────────────────────────────────────
   useEffect(() => {
-    isOnboardingComplete().then(setOnboardingDone);
+    void isOnboardingComplete().then(setOnboardingDone);
   }, []);
 
   // ── Health check (alarm verification on resume) ─────────────────────────────
   useEffect(() => {
     startHealthCheck();
     return () => stopHealthCheck();
+  }, []);
+
+  // ── Native alarmFired event channel ───────────────────────────────────────
+  // The native side fires the alarm (and repeats every 60s) on its own;
+  // here we only sync state + show the in-app alarm screen when visible.
+  useEffect(() => {
+    void startAlarmFiredListener((instance) => {
+      if (instance.state !== 'REMINDING') return;
+      if (document.visibilityState !== 'visible') return;
+      void getRoutineById(instance.routineId).then((routine) => {
+        setRoute({
+          name: 'Alarm',
+          routineName: routine?.name ?? 'Alarm',
+          repeatCount: instance.repeatCount,
+          instanceId: instance.id,
+          extensionsUsed: instance.extensionsUsed,
+        });
+      });
+    });
+    return () => {
+      void stopAlarmFiredListener();
+    };
   }, []);
 
   // ── Theme ──────────────────────────────────────────────────────────────────
@@ -62,7 +99,18 @@ function App() {
             name: 'Alarm',
             routineName: params?.routineName ?? 'Alarm',
             repeatCount: parseInt(params?.repeatCount ?? '0', 10),
+            instanceId: params?.instanceId ?? '',
+            extensionsUsed: parseInt(params?.extensionsUsed ?? '0', 10),
           });
+          break;
+        case 'Extension':
+          setRoute({
+            name: 'Extension',
+            instanceId: params?.instanceId ?? '',
+          });
+          break;
+        case 'Settings':
+          setRoute({ name: 'Settings' });
           break;
         default:
           setRoute({ name: 'Dashboard' });
@@ -87,11 +135,7 @@ function App() {
 
   // ── Onboarding ──────────────────────────────────────────────────────────────
   if (!onboardingDone) {
-    return (
-      <OnboardingScreen
-        onComplete={() => setOnboardingDone(true)}
-      />
-    );
+    return <OnboardingScreen onComplete={() => setOnboardingDone(true)} />;
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -99,20 +143,29 @@ function App() {
     case 'Scanner':
       return <ScannerScreen onBack={goBack} />;
     case 'QRExport':
-      return (
-        <QRExportScreen
-          routineId={route.routineId}
-          onBack={goBack}
-        />
-      );
+      return <QRExportScreen routineId={route.routineId} onBack={goBack} />;
     case 'Alarm':
       return (
         <AlarmScreen
           routineName={route.routineName}
           repeatCount={route.repeatCount}
-          onDismiss={goBack}
+          instanceId={route.instanceId}
+          extensionsUsed={route.extensionsUsed}
+          onExtend={() =>
+            setRoute({ name: 'Extension', instanceId: route.instanceId })
+          }
         />
       );
+    case 'Extension':
+      return (
+        <ExtensionScreen
+          instanceId={route.instanceId}
+          onDone={goBack}
+          onCancel={goBack}
+        />
+      );
+    case 'Settings':
+      return <SettingsScreen onBack={goBack} />;
     default:
       return (
         <DashboardScreen

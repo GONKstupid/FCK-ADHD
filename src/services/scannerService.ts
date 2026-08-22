@@ -28,9 +28,12 @@ function isNativePlatform(): boolean {
   return (
     typeof window !== 'undefined' &&
     'Capacitor' in window &&
-    typeof (window as unknown as { Capacitor: { isNativePlatform: () => boolean } }).Capacitor
-      .isNativePlatform === 'function' &&
-    (window as unknown as { Capacitor: { isNativePlatform: () => boolean } }).Capacitor.isNativePlatform()
+    typeof (
+      window as unknown as { Capacitor: { isNativePlatform: () => boolean } }
+    ).Capacitor.isNativePlatform === 'function' &&
+    (
+      window as unknown as { Capacitor: { isNativePlatform: () => boolean } }
+    ).Capacitor.isNativePlatform()
   );
 }
 
@@ -72,37 +75,41 @@ export async function startScan(): Promise<string> {
       if (errorHandle) await errorHandle.remove();
     }
 
-    (async () => {
+    void (async () => {
       try {
-        listenerHandle = await BarcodeScanner.addListener('barcodesScanned', async (event) => {
+        listenerHandle = await BarcodeScanner.addListener(
+          'barcodesScanned',
+          (event) => {
+            if (settled) return;
+            settled = true;
+            void (async () => {
+              await BarcodeScanner.stopScan();
+              await cleanup();
+
+              const rawValue = event.barcodes[0]?.rawValue;
+              if (!rawValue) {
+                reject(new Error('Barcode has no value'));
+                return;
+              }
+
+              if (isDebounced(rawValue)) {
+                reject(new Error('DEBOUNCED'));
+                return;
+              }
+
+              resolve(rawValue);
+            })();
+          },
+        );
+
+        errorHandle = await BarcodeScanner.addListener('scanError', () => {
           if (settled) return;
           settled = true;
-          await BarcodeScanner.stopScan();
-          await cleanup();
-
-          const rawValue = event.barcodes[0]?.rawValue;
-          if (!rawValue) {
-            reject(new Error('Barcode has no value'));
-            return;
-          }
-
-          if (isDebounced(rawValue)) {
-            reject(new Error('DEBOUNCED'));
-            return;
-          }
-
-          resolve(rawValue);
-        });
-
-        errorHandle = await BarcodeScanner.addListener('scanError', async () => {
-          if (settled) return;
-          settled = true;
-          await cleanup();
-          reject(new Error('Scan failed'));
+          void cleanup().then(() => reject(new Error('Scan failed')));
         });
 
         await BarcodeScanner.startScan();
-      } catch (err) {
+      } catch {
         if (!settled) {
           settled = true;
           await cleanup();

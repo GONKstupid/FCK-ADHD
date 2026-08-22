@@ -1,4 +1,27 @@
-@import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=JetBrains+Mono:wght@400;500;700&display=swap');
+/* ─── Lokale Schriften (SIL Open Font License) ──────────────────────────────── */
+@font-face {
+  font-family: 'DotGothic16';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/dotgothic16-regular-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-700.woff2') format('woff2');
+}
 
 *,
 *::before,
@@ -11,11 +34,11 @@
 :root {
   /* --- Light theme (default) --- */
   --canvas-bg: #f5f3ec;
-  --canvas-dot: #cfcbbE;
+  --canvas-dot: #cfcbbe;
   --ink: #1b1b1a;
   --ink-soft: #5b584f;
   --paper: #f5f3ec;
-  --paper-border: #cfcbbE;
+  --paper-border: #cfcbbe;
   --accent: #ff3b30;
 
   /* --- Semantic aliases --- */
@@ -78,7 +101,11 @@ a {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background-image: radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
+  background-image: radial-gradient(
+    circle,
+    var(--canvas-dot) 1px,
+    transparent 1px
+  );
   background-size: 24px 24px;
   opacity: 0.6;
 }
@@ -130,6 +157,12 @@ a {
   color: var(--ink-soft);
 }
 
+.header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 /* ─── Main ───────────────────────────────────────────────────────────────────── */
 .main {
   flex: 1;
@@ -152,7 +185,10 @@ a {
   font-weight: 500;
   letter-spacing: 0.04em;
   padding: 0.5rem 1rem;
-  transition: background 0.15s, color 0.15s, transform 0.1s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    transform 0.1s;
 }
 
 .btn:active {
@@ -194,7 +230,9 @@ a {
   border-radius: 999px;
   padding: 1rem 2.5rem;
   box-shadow: 0 4px 24px color-mix(in srgb, var(--accent) 40%, transparent);
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
 }
 
 .btn--scan:hover {
@@ -246,7 +284,9 @@ a {
   border-radius: 8px;
   padding: 1rem 1.125rem;
   cursor: pointer;
-  transition: border-color 0.15s, transform 0.1s;
+  transition:
+    border-color 0.15s,
+    transform 0.1s;
 }
 
 .card:hover {
@@ -339,8 +379,13 @@ a {
 }
 
 @keyframes pulse-badge {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 
 /* ─── Empty state ────────────────────────────────────────────────────────────── */
@@ -384,7 +429,9 @@ a {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ─── Scanner viewfinder ─────────────────────────────────────────────────────── */
@@ -421,10 +468,30 @@ a {
   border-width: 0;
 }
 
-.viewfinder__corner--tl { top: 12px; left: 12px; border-top-width: 2px; border-left-width: 2px; }
-.viewfinder__corner--tr { top: 12px; right: 12px; border-top-width: 2px; border-right-width: 2px; }
-.viewfinder__corner--bl { bottom: 12px; left: 12px; border-bottom-width: 2px; border-left-width: 2px; }
-.viewfinder__corner--br { bottom: 12px; right: 12px; border-bottom-width: 2px; border-right-width: 2px; }
+.viewfinder__corner--tl {
+  top: 12px;
+  left: 12px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+.viewfinder__corner--tr {
+  top: 12px;
+  right: 12px;
+  border-top-width: 2px;
+  border-right-width: 2px;
+}
+.viewfinder__corner--bl {
+  bottom: 12px;
+  left: 12px;
+  border-bottom-width: 2px;
+  border-left-width: 2px;
+}
+.viewfinder__corner--br {
+  bottom: 12px;
+  right: 12px;
+  border-bottom-width: 2px;
+  border-right-width: 2px;
+}
 
 .viewfinder__scanline {
   position: absolute;
@@ -437,9 +504,15 @@ a {
 }
 
 @keyframes scanline {
-  0%   { top: 20%; }
-  50%  { top: 75%; }
-  100% { top: 20%; }
+  0% {
+    top: 20%;
+  }
+  50% {
+    top: 75%;
+  }
+  100% {
+    top: 20%;
+  }
 }
 
 .viewfinder__center {
@@ -590,7 +663,9 @@ a {
   border-radius: 50%;
   border: 2px solid var(--accent, #ff453a);
   opacity: 0.15;
-  transition: transform 0.8s ease, opacity 0.8s ease;
+  transition:
+    transform 0.8s ease,
+    opacity 0.8s ease;
 }
 
 .alarm-screen__ring--active {
@@ -616,9 +691,16 @@ a {
 }
 
 @keyframes alarm-bounce {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-4px) rotate(-8deg); }
-  75% { transform: translateY(-4px) rotate(8deg); }
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-4px) rotate(-8deg);
+  }
+  75% {
+    transform: translateY(-4px) rotate(8deg);
+  }
 }
 
 .alarm-screen__label {
@@ -630,11 +712,27 @@ a {
 }
 
 .alarm-screen__repeat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.alarm-screen__repeat-label {
   font-family: var(--font-mono);
-  font-size: 0.8125rem;
+  font-size: 0.6875rem;
   color: #888888;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+
+/* Dot-matrix counter — DotGothic16 gives the digits their pixel-grid look */
+.alarm-screen__repeat-count {
+  font-family: var(--font-dot);
+  font-size: 2.5rem;
+  line-height: 1;
+  color: #ffffff;
+  letter-spacing: 0.08em;
 }
 
 .alarm-screen__divider {
@@ -647,10 +745,16 @@ a {
 
 .alarm-screen__instruction {
   font-family: var(--font-mono);
-  font-size: 0.875rem;
+  font-size: 1.0625rem;
   color: var(--accent, #ff453a);
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid color-mix(in srgb, var(--accent, #ff453a) 55%, transparent);
+  border-radius: 999px;
+  padding: 0.75rem 1.75rem;
+  background: color-mix(in srgb, var(--accent, #ff453a) 12%, transparent);
+  animation: pulse-badge 1.5s ease-in-out infinite;
 }
 
 .alarm-screen__dismiss {
@@ -663,12 +767,42 @@ a {
   font-size: 0.75rem;
   padding: 0.625rem 1.5rem;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .alarm-screen__dismiss:hover {
   color: #ccc;
   border-color: #666;
+}
+
+.alarm-screen__snooze-hint {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: #666666;
+  max-width: 260px;
+  line-height: 1.5;
+}
+
+/* Deliberately understated — confirming (QR scan) stays the easy option */
+.alarm-screen__extend {
+  margin-top: 1.25rem;
+  background: transparent;
+  border: none;
+  color: #555555;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.alarm-screen__extend:hover {
+  color: #999999;
 }
 
 /* ─── Onboarding ──────────────────────────────────────────────────────────── */
@@ -687,7 +821,11 @@ a {
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background-image: radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
+  background-image: radial-gradient(
+    circle,
+    var(--canvas-dot) 1px,
+    transparent 1px
+  );
   background-size: 24px 24px;
   opacity: 0.4;
 }
@@ -766,6 +904,276 @@ a {
 .onboarding__skip {
   font-size: 0.75rem;
   color: var(--ink-soft);
+}
+
+/* ─── Settings ─────────────────────────────────────────────────────────── */
+.settings-main {
+  max-width: 420px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.settings-section {
+  background: var(--paper);
+  border: 1px solid var(--paper-border);
+  border-radius: 8px;
+  padding: 1rem 1.125rem;
+}
+
+.settings-section__title {
+  font-family: var(--font-dot);
+  font-size: 0.9375rem;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  margin-bottom: 0.75rem;
+}
+
+.settings-hint {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+.settings-ringtone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.settings-ringtone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--paper-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--ink);
+  text-align: left;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.settings-ringtone:hover {
+  border-color: var(--ink-soft);
+}
+
+.settings-ringtone--active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.settings-ringtone__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-ringtone__check {
+  color: var(--accent);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px dashed var(--paper-border);
+}
+
+.settings-row:last-of-type {
+  border-bottom: none;
+}
+
+.settings-row__info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.settings-row__label {
+  font-size: 0.8125rem;
+  color: var(--ink);
+}
+
+.settings-row__action {
+  margin-top: 0;
+  width: 100%;
+}
+
+/* ─── Glyph-Streifen (Signatur-Element, Spec §9) ─────────────────────────── */
+.glyph-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.375rem 1.25rem 0.4375rem;
+  border-bottom: 1px dashed var(--paper-border);
+  position: relative;
+  z-index: 2;
+}
+
+.glyph-strip__dots {
+  flex: 1;
+  font-family: var(--font-dot);
+  font-size: 0.8125rem;
+  line-height: 1;
+  letter-spacing: 0.4em;
+  white-space: nowrap;
+  overflow: hidden;
+  user-select: none;
+  transition:
+    color 0.3s,
+    opacity 0.3s;
+}
+
+.glyph-strip__label {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  transition: color 0.3s;
+}
+
+/* aus / gedimmt */
+.glyph-strip--idle .glyph-strip__dots {
+  color: var(--ink-soft);
+  opacity: 0.3;
+}
+
+/* wartend — gedimmt mit dezentem Puls */
+.glyph-strip--waiting .glyph-strip__dots {
+  color: var(--ink-soft);
+  opacity: 0.6;
+  animation: glyph-strip-breathe 3s ease-in-out infinite;
+}
+
+/* aktiv — pulsierend rot (einziger roter Zustand) */
+.glyph-strip--reminding .glyph-strip__dots {
+  color: var(--accent);
+  opacity: 1;
+  animation: glyph-strip-pulse 1s ease-in-out infinite;
+}
+
+.glyph-strip--reminding .glyph-strip__label {
+  color: var(--accent);
+}
+
+@keyframes glyph-strip-breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+@keyframes glyph-strip-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ─── Onboarding (erweitert) ─────────────────────────────────────────── */
+.onboarding__progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.onboarding__progress-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--paper-border);
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+
+.onboarding__progress-dot--active {
+  background: var(--ink);
+  transform: scale(1.25);
+}
+
+.onboarding__progress-dot--done {
+  background: var(--ink-soft);
+}
+
+.onboarding__step-meta {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-soft);
+}
+
+.onboarding__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--paper-border);
+  color: var(--ink-soft);
+  margin-bottom: 0.75rem;
+}
+
+.onboarding__status--granted {
+  border-color: #2ecc40;
+  color: #1a7a24;
+  background: color-mix(in srgb, #2ecc40 10%, transparent);
+}
+
+[data-theme='dark'] .onboarding__status--granted {
+  color: #6fdc7c;
+}
+
+.onboarding__status--missing {
+  border-color: #c78500;
+  color: #c78500;
+  background: color-mix(in srgb, #c78500 8%, transparent);
+}
+
+[data-theme='dark'] .onboarding__status--missing {
+  color: #f0a830;
+  border-color: #f0a830;
+}
+
+.onboarding__warning {
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  width: 100%;
+  max-width: 320px;
 }
 
 /* ─── Print styles ───────────────────────────────────────────────────────────── */

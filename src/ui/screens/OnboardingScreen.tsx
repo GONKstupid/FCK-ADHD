@@ -1,7 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Preferences } from '@capacitor/preferences';
 import {
   isNative,
+  hasExactAlarmPermission,
+  canUseFullScreenIntent,
+  openExactAlarmSettings,
+  openFullScreenIntentSettings,
   requestBatteryOptimizationExemption,
 } from '../../services/blockerBridge';
 
@@ -11,17 +15,111 @@ interface Props {
 
 const PREF_KEY = 'onboarding_complete';
 
+/** Inhaltliche Schritte (ohne den Abschluss-Screen „Alles bereit!“). */
+const TOTAL_STEPS = 6;
+
+/**
+ * Schritte, deren Überspringen eine Warnung auslöst
+ * (exakte Alarme, Vollbild-Benachrichtigungen, Akku-Optimierung).
+ */
+const WARN_ON_SKIP = new Set([2, 3, 4]);
+
+const SKIP_WARNING =
+  'Ohne diese Berechtigung ist die Zuverlässigkeit der Alarme nicht garantiert.';
+
+/** Kleiner Status-Chip für Berechtigungen. */
+function StatusChip({ granted }: { granted: boolean | null }) {
+  if (granted === null) {
+    return <span className="onboarding__status">Prüfe…</span>;
+  }
+  return granted ? (
+    <span className="onboarding__status onboarding__status--granted">
+      ✓ Erteilt
+    </span>
+  ) : (
+    <span className="onboarding__status onboarding__status--missing">
+      ! Fehlt
+    </span>
+  );
+}
+
 /**
  * Onboarding screen shown on first launch.
- * Explains why battery optimization exemption is needed (safety app).
+ * Multi-step flow (German) that explains why this safety app needs
+ * permissions so alarms ring reliably.
  */
 export default function OnboardingScreen({ onComplete }: Props) {
   const [step, setStep] = useState(0);
   const [requesting, setRequesting] = useState(false);
+  const [skipWarned, setSkipWarned] = useState(false);
+  const [exactAlarmGranted, setExactAlarmGranted] = useState<boolean | null>(
+    null,
+  );
+  const [fullScreenGranted, setFullScreenGranted] = useState<boolean | null>(
+    null,
+  );
 
+  const showNativeSteps = isNative();
+
+  // ── Permission status (native only) ────────────────────────────────────────
+  const refreshPermissions = useCallback(async () => {
+    if (!isNative()) return;
+    try {
+      const [exact, fsi] = await Promise.all([
+        hasExactAlarmPermission(),
+        canUseFullScreenIntent(),
+      ]);
+      setExactAlarmGranted(exact.granted);
+      setFullScreenGranted(fsi.granted);
+    } catch (err) {
+      console.error('[OnboardingScreen] permission check failed:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshPermissions();
+  }, [refreshPermissions]);
+
+  // Re-check when the user returns from the system settings screen.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshPermissions();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () =>
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [refreshPermissions]);
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
   async function handleFinish() {
     await Preferences.set({ key: PREF_KEY, value: 'true' });
     onComplete();
+  }
+
+  function goTo(next: number) {
+    setSkipWarned(false);
+    setStep(next);
+  }
+
+  function handleSkip() {
+    if (WARN_ON_SKIP.has(step) && !skipWarned) {
+      setSkipWarned(true);
+      return;
+    }
+    goTo(step + 1);
+  }
+
+  // ── Permission actions ─────────────────────────────────────────────────────
+  async function handleExactAlarm() {
+    await openExactAlarmSettings();
+    await refreshPermissions();
+  }
+
+  async function handleFullScreenIntent() {
+    await openFullScreenIntentSettings();
+    await refreshPermissions();
   }
 
   async function handleBatteryExemption() {
@@ -32,16 +130,38 @@ export default function OnboardingScreen({ onComplete }: Props) {
       // User may have dismissed the system dialog — that's fine
     }
     setRequesting(false);
-    setStep(1);
+    goTo(5);
   }
-
-  const showNativeSteps = isNative();
 
   return (
     <div className="onboarding">
       <div className="onboarding__bg" aria-hidden />
 
       <div className="onboarding__content">
+        {/* ── Fortschritt (nur während der Schritte, nicht am Ende) ── */}
+        {step < TOTAL_STEPS && (
+          <>
+            <span className="onboarding__step-meta">
+              Schritt {step + 1} von {TOTAL_STEPS}
+            </span>
+            <div className="onboarding__progress" aria-hidden>
+              {Array.from({ length: TOTAL_STEPS }, (_, i) => (
+                <span
+                  key={i}
+                  className={`onboarding__progress-dot ${
+                    i === step
+                      ? 'onboarding__progress-dot--active'
+                      : i < step
+                        ? 'onboarding__progress-dot--done'
+                        : ''
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ── Schritt 1: Willkommen / Warum ── */}
         {step === 0 && (
           <>
             <div className="onboarding__logo">
@@ -51,52 +171,268 @@ export default function OnboardingScreen({ onComplete }: Props) {
 
             <div className="onboarding__card">
               <div className="onboarding__icon">🔔</div>
-              <h2 className="onboarding__heading">Zuverlässige Alarme</h2>
+              <h2 className="onboarding__heading">Eine Sicherheits-App</h2>
               <p className="onboarding__text">
-                FCK-ADHD ist eine Sicherheits-App, die dich zuverlässig an
-                wichtige Aufgaben erinnert — auch wenn dein Handy im
+                FCK-ADHD erinnert dich zuverlässig an wichtige Aufgaben — zum
+                Beispiel den Herd auszuschalten. Auch wenn dein Handy im
                 Energiesparmodus ist.
               </p>
               <p className="onboarding__text">
-                Damit Alarme immer zur richtigen Zeit kommen, braucht die App
-                eine Ausnahme von der Akku-Optimierung.
+                Damit jeder Alarm garantiert klingelt, braucht die App einige
+                Berechtigungen. Wir führen dich kurz durch die wichtigsten.
               </p>
             </div>
 
             <button
               className="btn btn--scan onboarding__btn"
-              onClick={showNativeSteps ? handleBatteryExemption : handleFinish}
-              disabled={requesting}
+              onClick={() => goTo(1)}
             >
-              {showNativeSteps ? 'Akku-Ausnahme erlauben' : 'Los geht\'s'}
+              Weiter
             </button>
 
-            {showNativeSteps && (
-              <button
-                className="btn btn--ghost onboarding__skip"
-                onClick={handleFinish}
-              >
-                Überspringen
-              </button>
-            )}
+            <button
+              className="btn btn--ghost onboarding__skip"
+              onClick={handleSkip}
+            >
+              Überspringen
+            </button>
           </>
         )}
 
+        {/* ── Schritt 2: Benachrichtigungen ── */}
         {step === 1 && (
+          <>
+            <div className="onboarding__card">
+              <div className="onboarding__icon">📣</div>
+              <h2 className="onboarding__heading">Benachrichtigungen</h2>
+              <p className="onboarding__text">
+                Benachrichtigungen werden für die Alarm-Anzeige benötigt. Auf
+                Android 13 oder neuer fragt das System die Berechtigung
+                automatisch an, sobald sie gebraucht wird.
+              </p>
+              {!showNativeSteps && (
+                <p className="onboarding__text">
+                  Im Browser ist hier nichts zu tun — dieser Schritt betrifft
+                  nur die Android-App.
+                </p>
+              )}
+            </div>
+
+            <button
+              className="btn btn--scan onboarding__btn"
+              onClick={() => goTo(2)}
+            >
+              Weiter
+            </button>
+
+            <button
+              className="btn btn--ghost onboarding__skip"
+              onClick={handleSkip}
+            >
+              Überspringen
+            </button>
+          </>
+        )}
+
+        {/* ── Schritt 3: Exakte Alarme ── */}
+        {step === 2 && (
+          <>
+            <div className="onboarding__card">
+              <div className="onboarding__icon">⏰</div>
+              <h2 className="onboarding__heading">Exakte Alarme</h2>
+              {showNativeSteps && <StatusChip granted={exactAlarmGranted} />}
+              <p className="onboarding__text">
+                Ab Android 12 braucht die App eine eigene Berechtigung für
+                minutengenaue Alarme. Ohne sie kann das System Alarme verzögern
+                oder ganz streichen.
+              </p>
+              {!showNativeSteps && (
+                <p className="onboarding__text">
+                  Im Browser ist hier nichts zu tun — dieser Schritt betrifft
+                  nur die Android-App.
+                </p>
+              )}
+            </div>
+
+            {showNativeSteps && exactAlarmGranted === false && (
+              <button
+                className="btn btn--scan onboarding__btn"
+                onClick={() => void handleExactAlarm()}
+              >
+                Berechtigung erteilen
+              </button>
+            )}
+
+            <button
+              className={`btn ${
+                showNativeSteps && exactAlarmGranted === false
+                  ? 'btn--secondary'
+                  : 'btn--scan'
+              } onboarding__btn`}
+              onClick={() => goTo(3)}
+            >
+              Weiter
+            </button>
+
+            {skipWarned && (
+              <p className="onboarding__warning" role="alert">
+                {SKIP_WARNING}
+              </p>
+            )}
+
+            <button
+              className="btn btn--ghost onboarding__skip"
+              onClick={handleSkip}
+            >
+              {skipWarned ? 'Trotzdem überspringen' : 'Überspringen'}
+            </button>
+          </>
+        )}
+
+        {/* ── Schritt 4: Vollbild-Benachrichtigungen ── */}
+        {step === 3 && (
+          <>
+            <div className="onboarding__card">
+              <div className="onboarding__icon">📲</div>
+              <h2 className="onboarding__heading">
+                Vollbild-Benachrichtigungen
+              </h2>
+              {showNativeSteps && <StatusChip granted={fullScreenGranted} />}
+              <p className="onboarding__text">
+                Ab Android 14 muss die App Alarme im Vollbild anzeigen dürfen —
+                nur so erscheint der Alarm auch über dem Sperrbildschirm.
+              </p>
+              {!showNativeSteps && (
+                <p className="onboarding__text">
+                  Im Browser ist hier nichts zu tun — dieser Schritt betrifft
+                  nur die Android-App.
+                </p>
+              )}
+            </div>
+
+            {showNativeSteps && fullScreenGranted === false && (
+              <button
+                className="btn btn--scan onboarding__btn"
+                onClick={() => void handleFullScreenIntent()}
+              >
+                Berechtigung erteilen
+              </button>
+            )}
+
+            <button
+              className={`btn ${
+                showNativeSteps && fullScreenGranted === false
+                  ? 'btn--secondary'
+                  : 'btn--scan'
+              } onboarding__btn`}
+              onClick={() => goTo(4)}
+            >
+              Weiter
+            </button>
+
+            {skipWarned && (
+              <p className="onboarding__warning" role="alert">
+                {SKIP_WARNING}
+              </p>
+            )}
+
+            <button
+              className="btn btn--ghost onboarding__skip"
+              onClick={handleSkip}
+            >
+              {skipWarned ? 'Trotzdem überspringen' : 'Überspringen'}
+            </button>
+          </>
+        )}
+
+        {/* ── Schritt 5: Akku-Optimierung ── */}
+        {step === 4 && (
+          <>
+            <div className="onboarding__card">
+              <div className="onboarding__icon">🔋</div>
+              <h2 className="onboarding__heading">Akku-Optimierung</h2>
+              <p className="onboarding__text">
+                Damit Alarme auch im Energiesparmodus pünktlich kommen, braucht
+                die App eine Ausnahme von der Akku-Optimierung.
+              </p>
+              {!showNativeSteps && (
+                <p className="onboarding__text">
+                  Im Browser ist hier nichts zu tun — dieser Schritt betrifft
+                  nur die Android-App.
+                </p>
+              )}
+            </div>
+
+            <button
+              className="btn btn--scan onboarding__btn"
+              onClick={() =>
+                void (showNativeSteps ? handleBatteryExemption() : goTo(5))
+              }
+              disabled={requesting}
+            >
+              {showNativeSteps ? 'Akku-Ausnahme erlauben' : 'Weiter'}
+            </button>
+
+            {skipWarned && (
+              <p className="onboarding__warning" role="alert">
+                {SKIP_WARNING}
+              </p>
+            )}
+
+            <button
+              className="btn btn--ghost onboarding__skip"
+              onClick={handleSkip}
+            >
+              {skipWarned ? 'Trotzdem überspringen' : 'Überspringen'}
+            </button>
+          </>
+        )}
+
+        {/* ── Schritt 6: Kamera-Hinweis ── */}
+        {step === 5 && (
+          <>
+            <div className="onboarding__card">
+              <div className="onboarding__icon">📷</div>
+              <h2 className="onboarding__heading">Kamera</h2>
+              <p className="onboarding__text">
+                Zum Bestätigen eines Alarms scannst du einen QR-Code. Den
+                Kamera-Zugriff fragt die App automatisch beim ersten Scan an —
+                hier ist nichts zu tun.
+              </p>
+            </div>
+
+            <button
+              className="btn btn--scan onboarding__btn"
+              onClick={() => goTo(6)}
+            >
+              Weiter
+            </button>
+
+            <button
+              className="btn btn--ghost onboarding__skip"
+              onClick={handleSkip}
+            >
+              Überspringen
+            </button>
+          </>
+        )}
+
+        {/* ── Abschluss ── */}
+        {step === TOTAL_STEPS && (
           <>
             <div className="onboarding__card">
               <div className="onboarding__icon">✓</div>
               <h2 className="onboarding__heading">Alles bereit!</h2>
               <p className="onboarding__text">
                 Die App kann jetzt zuverlässig Alarme auslösen, auch im
-                Hintergrund. Du kannst jederzeit in den Einstellungen des
-                Geräts die Berechtigung ändern.
+                Hintergrund. Du kannst jederzeit in den Einstellungen des Geräts
+                die Berechtigungen ändern.
               </p>
             </div>
 
             <button
               className="btn btn--scan onboarding__btn"
-              onClick={handleFinish}
+              onClick={() => void handleFinish()}
             >
               Los geht's
             </button>
