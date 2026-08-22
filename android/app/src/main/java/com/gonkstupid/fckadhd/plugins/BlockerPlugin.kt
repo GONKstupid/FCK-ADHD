@@ -80,6 +80,21 @@ class BlockerPlugin : Plugin() {
                 }
             }
         }
+
+        /** Emits `alarmConfirmed` { instanceId: string } to the web layer. */
+        fun emitAlarmConfirmed(instanceId: String) {
+            mainHandler.post {
+                synchronized(instances) {
+                    instances.removeAll { it.get() == null }
+                    for (ref in instances) {
+                        val plugin = ref.get() ?: continue
+                        val data = JSObject()
+                        data.put("instanceId", instanceId)
+                        plugin.notifyListeners("alarmConfirmed", data)
+                    }
+                }
+            }
+        }
     }
 
     override fun load() {
@@ -100,11 +115,15 @@ class BlockerPlugin : Plugin() {
     fun showAlarm(call: PluginCall) {
         val label = call.getString("label") ?: "Alarm"
         val repeatCount = call.getInt("repeatCount") ?: 0
+        val silent = call.getBoolean("silent") ?: false
+        val instanceId = call.getString("instanceId")
 
         val intent = Intent(context, AlarmActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra("label", label)
             putExtra("repeatCount", repeatCount)
+            putExtra("silent", silent)
+            instanceId?.let { putExtra("instanceId", it) }
         }
 
         bridge.activity?.runOnUiThread {
@@ -157,9 +176,13 @@ class BlockerPlugin : Plugin() {
 
         val label = call.getString("label")
         val repeatCount = call.getInt("repeatCount") // null when not provided
+        val silent = call.getBoolean("silent") // null when not provided
 
         alarmScheduler.scheduleExact(instanceId, deadlineMs, label, repeatCount)
         alarmScheduler.persistDeadline(instanceId, deadlineMs)
+        if (silent != null) {
+            alarmScheduler.persistSilent(instanceId, silent)
+        }
 
         val result = JSObject()
         result.put("scheduled", alarmScheduler.wasExactAlarmGranted())

@@ -33,6 +33,21 @@ export async function getAllRoutines(): Promise<Routine[]> {
   return db.routines.toArray();
 }
 
+/**
+ * Persists an updated routine. The stored qrCodeId is ALWAYS preserved:
+ * the QR code physically exists (printed/stuck somewhere), so its UUID
+ * must never change — even if the incoming object carries a different one.
+ */
+export async function updateRoutine(routine: Routine): Promise<Routine> {
+  const existing = await db.routines.get(routine.id);
+  const toStore: Routine = {
+    ...routine,
+    qrCodeId: existing?.qrCodeId ?? routine.qrCodeId,
+  };
+  await db.routines.put(toStore);
+  return toStore;
+}
+
 export async function deleteRoutine(id: string): Promise<void> {
   await db.routines.delete(id);
 }

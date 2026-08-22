@@ -206,13 +206,14 @@ describe('healthCheck – overdue WAITING instances are fired immediately (S10 r
 
     // web-triggered alarm effects so the user actually hears it
     expect(requestAudioFocus).toHaveBeenCalledTimes(1);
-    expect(showAlarm).toHaveBeenCalledWith(STEP_LABEL, 0);
+    expect(showAlarm).toHaveBeenCalledWith(STEP_LABEL, 0, false, 'inst-1');
     // native 60s repeat chain is started with the current repeat count
     expect(scheduleExactAlarm).toHaveBeenCalledWith(
       'inst-1',
       NOW + REPEAT_INTERVAL_MS,
       STEP_LABEL,
       0,
+      false,
     );
   });
 
@@ -232,7 +233,7 @@ describe('healthCheck – overdue WAITING instances are fired immediately (S10 r
 
     const instance = store.instances.get('inst-1')!;
     expect(instance.state).toBe('REMINDING');
-    expect(showAlarm).toHaveBeenCalledWith(STEP_LABEL, 0);
+    expect(showAlarm).toHaveBeenCalledWith(STEP_LABEL, 0, false, 'inst-1');
   });
 });
 

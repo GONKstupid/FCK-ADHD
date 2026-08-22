@@ -4,13 +4,16 @@ import ScannerScreen from './ui/screens/ScannerScreen';
 import QRExportScreen from './ui/screens/QRExportScreen';
 import AlarmScreen from './ui/screens/AlarmScreen';
 import ExtensionScreen from './ui/screens/ExtensionScreen';
+import RoutineEditScreen from './ui/screens/RoutineEditScreen';
 import SettingsScreen from './ui/screens/SettingsScreen';
 import OnboardingScreen, {
   isOnboardingComplete,
 } from './ui/screens/OnboardingScreen';
 import { startHealthCheck, stopHealthCheck } from './services/healthCheck';
 import {
+  startAlarmConfirmedListener,
   startAlarmFiredListener,
+  stopAlarmConfirmedListener,
   stopAlarmFiredListener,
 } from './services/alarmController';
 import { getRoutineById } from './services/routineService';
@@ -29,6 +32,7 @@ type Route =
       extensionsUsed: number;
     }
   | { name: 'Extension'; instanceId: string }
+  | { name: 'RoutineEdit'; routineId: string }
   | { name: 'Settings' };
 
 function App() {
@@ -71,6 +75,24 @@ function App() {
     };
   }, []);
 
+  // ── Native alarmConfirmed event channel ──────────────────────────────────
+  // The native "ERLEDIGT – HALTEN" button already runs handleConfirmDone
+  // inside the controller — here we only mirror the navigation effect: if
+  // the confirmed instance is the one currently shown on the AlarmScreen,
+  // leave it (the step advanced or the routine completed).
+  useEffect(() => {
+    void startAlarmConfirmedListener((instanceId) => {
+      setRoute((current) =>
+        current.name === 'Alarm' && current.instanceId === instanceId
+          ? { name: 'Dashboard' }
+          : current,
+      );
+    });
+    return () => {
+      void stopAlarmConfirmedListener();
+    };
+  }, []);
+
   // ── Theme ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     document.documentElement.setAttribute(
@@ -107,6 +129,12 @@ function App() {
           setRoute({
             name: 'Extension',
             instanceId: params?.instanceId ?? '',
+          });
+          break;
+        case 'RoutineEdit':
+          setRoute({
+            name: 'RoutineEdit',
+            routineId: params?.routineId ?? '',
           });
           break;
         case 'Settings':
@@ -154,6 +182,7 @@ function App() {
           onExtend={() =>
             setRoute({ name: 'Extension', instanceId: route.instanceId })
           }
+          onDone={goBack}
         />
       );
     case 'Extension':
@@ -166,6 +195,8 @@ function App() {
       );
     case 'Settings':
       return <SettingsScreen onBack={goBack} />;
+    case 'RoutineEdit':
+      return <RoutineEditScreen routineId={route.routineId} onBack={goBack} />;
     default:
       return (
         <DashboardScreen

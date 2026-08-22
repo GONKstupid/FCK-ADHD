@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { dismissCurrentRing } from '../../services/alarmController';
+import { dismissCurrentRing, handleConfirmDone } from '../../services/alarmController';
 import { MAX_EXTENSIONS } from '../../core/constants';
+import HoldButton from '../components/HoldButton';
 
 interface Props {
   routineName: string;
@@ -9,13 +10,16 @@ interface Props {
   extensionsUsed: number;
   /** Navigate to the extension flow. */
   onExtend: () => void;
+  /** Navigate back to the dashboard after the current step was confirmed. */
+  onDone: () => void;
 }
 
 /**
  * Fullscreen alarm screen — always dark palette (inverted).
- * Spec §9: confirming (QR scan) is the easy, dominant option.
+ * Spec §9: confirming ("Erledigt" hold button) is the easy, dominant option.
  * "Später" only silences the current ring — the alarm returns after
- * 60s via the native repeat chain until the QR code is scanned.
+ * 60s via the native repeat chain until the step is confirmed or the
+ * routine is ended by a QR scan.
  */
 export default function AlarmScreen({
   routineName,
@@ -23,8 +27,10 @@ export default function AlarmScreen({
   instanceId,
   extensionsUsed,
   onExtend,
+  onDone,
 }: Props) {
   const [pulse, setPulse] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => setPulse((p) => !p), 1000);
@@ -34,6 +40,14 @@ export default function AlarmScreen({
   async function handleLater() {
     // No navigation, no state change — native chain rings again in 60s.
     await dismissCurrentRing();
+  }
+
+  async function handleConfirm() {
+    if (confirming) return;
+    setConfirming(true);
+    // Applies SCAN_CONFIRM + native side effects (next step or completion).
+    await handleConfirmDone(instanceId);
+    onDone();
   }
 
   return (
@@ -65,8 +79,17 @@ export default function AlarmScreen({
         <div className="alarm-screen__divider" />
 
         <p className="alarm-screen__instruction">
-          QR-Code scannen zum Bestätigen
+          Halte ERLEDIGT zum Bestätigen
         </p>
+
+        {/* ── Erledigt: bestätigt den aktuellen Schritt ── */}
+        <div className="alarm-screen__confirm">
+          <HoldButton
+            label="ERLEDIGT"
+            holdDuration={2000}
+            onComplete={() => void handleConfirm()}
+          />
+        </div>
 
         <button
           className="alarm-screen__dismiss"
@@ -76,7 +99,8 @@ export default function AlarmScreen({
         </button>
 
         <p className="alarm-screen__snooze-hint">
-          Der Alarm kommt in 1 Minute wieder – bis du den QR-Code scannst.
+          Die Erinnerung kommt in 1 Minute wieder – bis du bestätigst oder die
+          Routine per QR-Scan beendest.
         </p>
 
         {extensionsUsed < MAX_EXTENSIONS && (

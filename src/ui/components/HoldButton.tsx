@@ -7,13 +7,19 @@ interface Props {
   holdDuration?: number;
   /** Called when hold is completed successfully */
   onComplete: () => void;
+  /** Text shown while not holding. Default: 'HALTEN' */
+  label?: string;
 }
 
 const RADIUS = 72;
 const STROKE = 6;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
-export default function HoldButton({ holdDuration = 4000, onComplete }: Props) {
+export default function HoldButton({
+  holdDuration = 4000,
+  onComplete,
+  label = 'HALTEN',
+}: Props) {
   const [progress, setProgress] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -110,7 +116,7 @@ export default function HoldButton({ holdDuration = 4000, onComplete }: Props) {
       </svg>
 
       <span className={`hold-button__label ${isHolding ? 'hold-button__label--pulse' : ''}`}>
-        {isHolding ? `${Math.ceil((holdDuration * (1 - progress)) / 1000)}s` : 'HALTEN'}
+        {isHolding ? `${Math.ceil((holdDuration * (1 - progress)) / 1000)}s` : label}
       </span>
     </div>
   );

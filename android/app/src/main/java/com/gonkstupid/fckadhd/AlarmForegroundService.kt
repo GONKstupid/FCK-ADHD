@@ -20,12 +20,22 @@ class AlarmForegroundService : Service() {
 
     companion object {
         private const val CHANNEL_ID = "alarm_channel"
+        private const val CHANNEL_ID_SILENT = "alarm_channel_silent"
         private const val NOTIFICATION_ID = 9001
         private const val WAKE_LOCK_TAG = "fckadhd:AlarmWakeLock"
 
-        fun start(context: Context, label: String) {
+        fun start(
+            context: Context,
+            label: String,
+            instanceId: String? = null,
+            silent: Boolean = false,
+            repeatCount: Int = 0,
+        ) {
             val intent = Intent(context, AlarmForegroundService::class.java).apply {
                 putExtra("label", label)
+                instanceId?.let { putExtra("instanceId", it) }
+                putExtra("silent", silent)
+                putExtra("repeatCount", repeatCount)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -50,9 +60,12 @@ class AlarmForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val label = intent?.getStringExtra("label") ?: "FCK-ADHD Alarm"
+        val instanceId = intent?.getStringExtra("instanceId")
+        val silent = intent?.getBooleanExtra("silent", false) ?: false
+        val repeatCount = intent?.getIntExtra("repeatCount", 0) ?: 0
 
         acquireWakeLock()
-        startForeground(NOTIFICATION_ID, buildNotification(label))
+        startForeground(NOTIFICATION_ID, buildNotification(label, instanceId, silent, repeatCount))
 
         return START_NOT_STICKY
     }
@@ -76,16 +89,38 @@ class AlarmForegroundService : Service() {
                 setBypassDnd(true)
             }
 
+            // Silent-mode reminders get a genuinely quiet channel: low
+            // importance, no sound, no vibration, no DND bypass.
+            val silentChannel = NotificationChannel(
+                CHANNEL_ID_SILENT,
+                "FCK-ADHD Stille Erinnerungen",
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = "Stille Erinnerungen für FCK-ADHD Routinen"
+                enableVibration(false)
+                setSound(null, null)
+            }
+
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager.createNotificationChannel(channel)
+            notificationManager.createNotificationChannel(silentChannel)
         }
     }
 
-    private fun buildNotification(label: String): Notification {
+    private fun buildNotification(
+        label: String,
+        instanceId: String?,
+        silent: Boolean,
+        repeatCount: Int,
+    ): Notification {
         // Intent straight to the alarm screen so tapping (or the system's
-        // full-screen launch) lands on AlarmActivity, not the web view.
+        // full-screen launch) lands on a fully-populated AlarmActivity,
+        // not the web view.
         val alarmIntent = Intent(this, AlarmActivity::class.java).apply {
             putExtra("label", label)
+            instanceId?.let { putExtra("instanceId", it) }
+            putExtra("silent", silent)
+            putExtra("repeatCount", repeatCount)
         }
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -93,6 +128,24 @@ class AlarmForegroundService : Service() {
             alarmIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+
+        // Silent deliveries post on the dedicated low-importance channel —
+        // no sound, no vibration, no heads-up — so soft reminders stay soft.
+        if (silent) {
+            return NotificationCompat.Builder(this, CHANNEL_ID_SILENT)
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle("FCK-ADHD Alarm")
+                .setContentText(label)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .setSilent(true)
+                .setContentIntent(pendingIntent)
+                .setFullScreenIntent(pendingIntent, true)
+                .build()
+        }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)

@@ -9,6 +9,7 @@ import {
   updateInstance,
 } from './routineService';
 import {
+  addAlarmConfirmedListener,
   addAlarmFiredListener,
   cancelAlarm,
   dismissAlarm,
@@ -26,11 +27,11 @@ import { REPEAT_INTERVAL_MS } from '../core/constants';
 // and then performs the native side effects appropriate for the RESULTING
 // state. Services are imported at module level (existing code style).
 
+// Scanning a QR code either STARTS the routine (no active instance) or
+// ENDS the running one completely (all remaining steps confirmed at once).
 export type ScanResultStatus =
   | 'started'
-  | 'confirmed'
   | 'completed'
-  | 'step-completed'
   | 'unknown'
   | 'debounced'
   | 'cancelled';
@@ -44,12 +45,13 @@ export interface ScanResult {
 
 /**
  * Consolidates all QR-scan logic:
- * - REMINDING → SCAN_CONFIRM (confirm while the alarm rings)
- * - WAITING   → SCAN_CONFIRM (early completion of the running step)
+ * - REMINDING/WAITING → end the WHOLE routine: SCAN_CONFIRM is applied
+ *   repeatedly until the instance reaches IDLE (every remaining step is
+ *   confirmed in one go).
  * - otherwise → create a fresh instance + SCAN_START
  *
- * After every successful transition the native side effects for the
- * resulting state are applied (see applySideEffects).
+ * After the final state is reached the native side effects for that state
+ * are applied (see applySideEffects).
  */
 export async function handleScanResult(qrCodeId: string): Promise<ScanResult> {
   const routine = await getRoutineByQrCodeId(qrCodeId);
@@ -63,31 +65,32 @@ export async function handleScanResult(qrCodeId: string): Promise<ScanResult> {
   const active = await getActiveInstance(routine.id);
 
   if (active && (active.state === 'REMINDING' || active.state === 'WAITING')) {
-    const updated = await applyEvent(active.id, { type: 'SCAN_CONFIRM' });
-    if (!updated) {
+    // A scan on a running routine means "everything is done" — walk the
+    // state machine to IDLE with a bounded loop of SCAN_CONFIRM events.
+    let final: RoutineInstance | null = active;
+    const maxEvents = routine.steps.length + 1; // hard bound against loops
+    for (let i = 0; i < maxEvents && final.state !== 'IDLE'; i += 1) {
+      const next = await applyEvent(final.id, { type: 'SCAN_CONFIRM' });
+      if (!next) {
+        return {
+          status: 'unknown',
+          message: 'Routine-Instanz konnte nicht aktualisiert werden.',
+        };
+      }
+      final = next;
+    }
+
+    if (final.state !== 'IDLE') {
       return {
         status: 'unknown',
         message: 'Routine-Instanz konnte nicht aktualisiert werden.',
       };
     }
-    await applySideEffects(updated, routine);
 
-    if (updated.state === 'IDLE') {
-      return {
-        status: 'completed',
-        message: `✓ "${routine.name}" abgeschlossen!`,
-      };
-    }
-    if (updated.state === 'WAITING') {
-      return {
-        status: 'step-completed',
-        message: `✓ Schritt abgeschlossen – nächster Timer läuft.`,
-      };
-    }
-    // REMINDING — next step is an instant hint
+    await applySideEffects(final, routine);
     return {
-      status: 'confirmed',
-      message: `✓ Bestätigt. Nächster Schritt…`,
+      status: 'completed',
+      message: `✓ "${routine.name}" beendet.`,
     };
   }
 
@@ -102,6 +105,44 @@ export async function handleScanResult(qrCodeId: string): Promise<ScanResult> {
   }
   await applySideEffects(updated, routine);
   return { status: 'started', message: `✓ "${routine.name}" gestartet!` };
+}
+
+// ─── Confirm ("Erledigt") ─────────────────────────────────────────────────────────────────
+
+/**
+ * Confirms the CURRENT step only (the "Erledigt" slider on the alarm
+ * screen / native alarmConfirmed event): applies a single SCAN_CONFIRM
+ * and then performs the side effects for the resulting state — the
+ * routine advances to its next step (or completes on the last one).
+ *
+ * Stale-overlay guard: the event is only applied while the instance is
+ * REMINDING. A native alarmConfirmed can arrive after the web side has
+ * already confirmed (the instance already advanced to WAITING/IDLE) —
+ * re-applying SCAN_CONFIRM would skip a step (double confirm). Any
+ * non-REMINDING instance is returned unchanged: no event, no side
+ * effects.
+ *
+ * Returns the updated instance, or null if the instance/routine is
+ * missing or the transition failed.
+ */
+export async function handleConfirmDone(
+  instanceId: string,
+): Promise<RoutineInstance | null> {
+  const instance = await getInstance(instanceId);
+  if (!instance) return null;
+
+  const routine = await getRoutineById(instance.routineId);
+  if (!routine) return null;
+
+  // Stale-overlay guard: a confirm arriving after the instance already
+  // advanced must not apply another SCAN_CONFIRM.
+  if (instance.state !== 'REMINDING') return instance;
+
+  const updated = await applyEvent(instanceId, { type: 'SCAN_CONFIRM' });
+  if (!updated) return null;
+
+  await applySideEffects(updated, routine);
+  return updated;
 }
 
 // ─── Native alarm events ──────────────────────────────────────────────────────
@@ -158,16 +199,18 @@ export async function fireOverdueAlarm(
   instance: RoutineInstance,
 ): Promise<void> {
   const routine = await getRoutineById(instance.routineId);
-  const label =
-    routine?.steps[instance.currentStepIndex]?.label ?? routine?.name ?? '';
+  const step = routine?.steps[instance.currentStepIndex];
+  const label = step?.label ?? routine?.name ?? '';
+  const silent = step?.reminderMode === 'soft';
 
   await requestAudioFocus();
-  await showAlarm(label, instance.repeatCount);
+  await showAlarm(label, instance.repeatCount, silent, instance.id);
   await scheduleExactAlarm(
     instance.id,
     Date.now() + REPEAT_INTERVAL_MS,
     label,
     instance.repeatCount,
+    silent,
   );
 }
 
@@ -198,6 +241,10 @@ export async function handleExtend(
 
   if (succeeded && updated.deadline != null) {
     const routine = await getRoutineById(updated.routineId);
+    // cancelAlarm clears native silent metadata — re-derive silent from
+    // the current step so the snoozed chain keeps its soft behaviour.
+    const silent =
+      routine?.steps[updated.currentStepIndex]?.reminderMode === 'soft';
     await cancelAlarm(instanceId);
     // Recovering an existing chain → hand over the current repeat count
     // so native preserves it.
@@ -206,6 +253,7 @@ export async function handleExtend(
       updated.deadline,
       routine?.name,
       updated.repeatCount,
+      silent,
     );
     await dismissAlarm();
     await releaseAudioFocus();
@@ -218,8 +266,8 @@ export async function handleExtend(
 
 /**
  * Silences the current ring ONLY — no state change.
- * The alarm returns after 60s via the native repeat chain until the user
- * confirms by scanning the QR code.
+ * The alarm returns after 60s via the native repeat chain, until it is
+ * confirmed via the Erledigt button or the routine is ended by a QR scan.
  */
 export async function dismissCurrentRing(): Promise<void> {
   await dismissAlarm();
@@ -261,16 +309,54 @@ export async function stopAlarmFiredListener(): Promise<void> {
   }
 }
 
+// ─── alarmConfirmed listener lifecycle ─────────────────────────────────────────
+
+let unsubscribeConfirmed: (() => void) | null = null;
+
+/**
+ * Registers the native `alarmConfirmed` listener. For every event the
+ * current step is confirmed via handleConfirmDone — the same transition
+ * an "Erledigt" press on the web alarm screen triggers.
+ */
+export async function startAlarmConfirmedListener(
+  onConfirmed: (instanceId: string) => void,
+): Promise<() => void> {
+  await stopAlarmConfirmedListener();
+  const stop = await addAlarmConfirmedListener((event) => {
+    void handleConfirmDone(event.instanceId).then((updated) => {
+      if (updated) onConfirmed(event.instanceId);
+    });
+  });
+  unsubscribeConfirmed = stop;
+  return stop;
+}
+
+/**
+ * Removes the previously registered `alarmConfirmed` listener.
+ */
+export async function stopAlarmConfirmedListener(): Promise<void> {
+  if (unsubscribeConfirmed) {
+    const stop = unsubscribeConfirmed;
+    unsubscribeConfirmed = null;
+    await Promise.resolve(stop());
+  }
+}
+
 // ─── Side effects per resulting state ─────────────────────────────────────────
 
 /**
  * Applies the native side effects matching the state an instance is NOW in:
  *
- * - WAITING (with deadline) → schedule the exact alarm natively.
+ * - WAITING (with deadline) → schedule the exact alarm natively
+ *   (silent when the step runs in soft reminder mode) and dismiss any
+ *   leftover native overlay (e.g. after a confirm advanced the ringing
+ *   instance to its next WAITING step; harmless when nothing is shown).
  * - REMINDING (instant step, no deadline) → web-triggered alarm path:
- *   request audio focus and show the alarm activity directly. This is the
- *   ONLY path where web triggers an alarm, because instant-hint steps have
- *   no native alarm chain behind them.
+ *   request audio focus and show the alarm directly. This is the ONLY
+ *   path where web triggers an alarm, because instant-hint steps have no
+ *   native alarm chain behind them. Soft steps show a silent notification
+ *   and additionally schedule the native silent 60s repeat chain (so they
+ *   still repeat and escalate).
  * - IDLE (completed) → cancel alarm + dismiss ringing UI + release audio.
  */
 async function applySideEffects(
@@ -278,15 +364,39 @@ async function applySideEffects(
   routine: Routine,
 ): Promise<void> {
   if (instance.state === 'WAITING' && instance.deadline != null) {
+    const silent =
+      routine.steps[instance.currentStepIndex]?.reminderMode === 'soft';
     await cancelAlarm(instance.id); // drop any previous schedule first
-    await scheduleExactAlarm(instance.id, instance.deadline, routine.name);
+    await scheduleExactAlarm(
+      instance.id,
+      instance.deadline,
+      routine.name,
+      undefined,
+      silent,
+    );
+    // Close a leftover native overlay (stale alarm screen from the
+    // previous ring); harmless when nothing is shown.
+    await dismissAlarm();
     return;
   }
 
   if (instance.state === 'REMINDING' && instance.deadline == null) {
     const step = routine.steps[instance.currentStepIndex];
+    const silent = step?.reminderMode === 'soft';
+    const label = step?.label ?? routine.name;
     await requestAudioFocus();
-    await showAlarm(step?.label ?? routine.name, instance.repeatCount);
+    await showAlarm(label, instance.repeatCount, silent, instance.id);
+    if (silent) {
+      // Soft instant hints have no native chain behind them — start the
+      // silent 60s repeat chain so they repeat and escalate like full ones.
+      await scheduleExactAlarm(
+        instance.id,
+        Date.now() + REPEAT_INTERVAL_MS,
+        label,
+        instance.repeatCount,
+        true,
+      );
+    }
     return;
   }
 

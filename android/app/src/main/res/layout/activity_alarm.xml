@@ -36,9 +36,22 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="48dp"
             android:gravity="center"
-            android:text="Scanne QR-Code zum Bestätigen"
+            android:text="QR-Code scannen beendet die Routine"
             android:textColor="#FF453A"
             android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/btn_confirm_hold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/bg_confirm_hold"
+            android:gravity="center"
+            android:padding="22dp"
+            android:text="ERLEDIGT – HALTEN"
+            android:textColor="#30D158"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 

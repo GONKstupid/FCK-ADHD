@@ -113,12 +113,12 @@ Für jedes Szenario gilt: **Beobachtet** ankreuzen, **OK/Fehler** eintragen. Abw
 
 ### S2 – Scan während WAITING
 
-**Ziel:** Ein Scan in der Warte-Phase beendet die Instanz sofort (vgl. §2, §7).
+**Ziel:** Ein Scan in der Warte-Phase beendet die gesamte Routine sofort (vgl. §2, §7).
 
 - **Vorbereitung:** Instanz aktiv, Timer läuft (`WAITING`), Alarm hat noch nicht geklingelt.
 - **Schritte:**
   1. QR-Code erneut scannen.
-- **Erwartetes Ergebnis:** Der aktuelle Schritt wird **sofort abgeschlossen**; Zustand zurück auf `IDLE`; kein Alarm, kein Klingeln mehr; Dashboard zeigt Routine als inaktiv.
+- **Erwartetes Ergebnis:** Der Scan beendet **die gesamte Routine auf einen Schlag** – alle noch offenen Schritte werden zusammen bestätigt; Zustand zurück auf `IDLE`; kein Alarm, kein Klingeln mehr; Dashboard zeigt Routine als inaktiv.
 
 | Beobachtet | OK | Fehler |
 |---|---|---|

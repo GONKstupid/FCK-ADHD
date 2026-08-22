@@ -9,13 +9,28 @@ export interface AlarmFiredEvent {
   repeatCount: number;
 }
 
+/** Payload of the `alarmConfirmed` event pushed by the native side. */
+export interface AlarmConfirmedEvent {
+  instanceId: string;
+}
+
 export interface Ringtone {
   uri: string;
   title: string;
 }
 
 interface BlockerPluginInterface {
-  showAlarm(options: { label: string; repeatCount: number }): Promise<void>;
+  showAlarm(options: {
+    label: string;
+    repeatCount: number;
+    /**
+     * Soft reminder: silent notification only — no sound, no vibration,
+     * no full-screen takeover. Absent/false = full alarm behaviour.
+     */
+    silent?: boolean;
+    /** Instance the alarm belongs to (lets native cancel/repeat per instance). */
+    instanceId?: string;
+  }): Promise<void>;
   dismissAlarm(): Promise<void>;
   requestAudioFocus(): Promise<void>;
   releaseAudioFocus(): Promise<void>;
@@ -29,6 +44,11 @@ interface BlockerPluginInterface {
      * When absent, native preserves the existing count.
      */
     repeatCount?: number;
+    /**
+     * Soft reminder chain: fire silently (notification only, no sound).
+     * Absent/false = full alarm behaviour.
+     */
+    silent?: boolean;
   }): Promise<{ scheduled: boolean }>;
   cancelAlarm(options: { instanceId: string }): Promise<void>;
   isAlarmScheduled(options: {
@@ -59,6 +79,10 @@ interface BlockerPluginInterface {
     eventName: 'alarmFired',
     listenerFunc: (event: AlarmFiredEvent) => void,
   ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'alarmConfirmed',
+    listenerFunc: (event: AlarmConfirmedEvent) => void,
+  ): Promise<PluginListenerHandle>;
 }
 
 // ─── Bridge ───────────────────────────────────────────────────────────────────
@@ -72,14 +96,20 @@ export function isNative(): boolean {
 
 /**
  * Shows a full-screen alarm activity over the lock screen.
+ * With `silent` the native side shows a silent notification instead of
+ * the loud full-screen alarm (soft reminder mode).
+ * `instanceId` ties the shown alarm to its instance so native can
+ * cancel/repeat it per instance.
  * No-op on web.
  */
 export async function showAlarm(
   label: string,
   repeatCount: number,
+  silent?: boolean,
+  instanceId?: string,
 ): Promise<void> {
   if (!isNative()) return;
-  await BlockerNative.showAlarm({ label, repeatCount });
+  await BlockerNative.showAlarm({ label, repeatCount, silent, instanceId });
 }
 
 /**
@@ -115,6 +145,8 @@ export async function releaseAudioFocus(): Promise<void> {
  * web must NOT schedule repeats itself.
  * `repeatCount` is optional: pass it only when restarting/recovering an
  * existing alarm chain so native preserves the current count.
+ * `silent` marks a soft-reminder chain (silent notifications instead of
+ * loud alarms).
  * Failures are logged and swallowed (scheduling is best-effort).
  * No-op on web.
  */
@@ -123,6 +155,7 @@ export async function scheduleExactAlarm(
   deadlineMs: number,
   label?: string,
   repeatCount?: number,
+  silent?: boolean,
 ): Promise<void> {
   if (!isNative()) return;
   try {
@@ -131,6 +164,7 @@ export async function scheduleExactAlarm(
       deadlineMs,
       label,
       repeatCount,
+      silent,
     });
   } catch (err) {
     console.error('[blockerBridge] scheduleExactAlarm failed:', err);
@@ -293,6 +327,23 @@ export async function addAlarmFiredListener(
 ): Promise<() => void> {
   if (!isNative()) return () => {};
   const handle = await BlockerNative.addListener('alarmFired', cb);
+  return () => {
+    void handle.remove();
+  };
+}
+
+/**
+ * Subscribes to the native `alarmConfirmed` event. Native emits it when
+ * the user confirms an alarm directly on the alarm screen ("Erledigt"),
+ * so the web state machine can advance the instance the same way a QR
+ * scan confirm would.
+ * Returns an unsubscribe function. No-op on web.
+ */
+export async function addAlarmConfirmedListener(
+  cb: (event: AlarmConfirmedEvent) => void,
+): Promise<() => void> {
+  if (!isNative()) return () => {};
+  const handle = await BlockerNative.addListener('alarmConfirmed', cb);
   return () => {
     void handle.remove();
   };

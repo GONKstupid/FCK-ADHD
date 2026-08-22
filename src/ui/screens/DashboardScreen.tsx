@@ -131,6 +131,17 @@ export default function DashboardScreen({
                     <span className={`badge ${badge.className}`}>
                       {badge.label}
                     </span>
+                    <button
+                      className="card__edit"
+                      title="Routine bearbeiten"
+                      onClick={(event) => {
+                        // Card click opens the QR export — don't trigger it.
+                        event.stopPropagation();
+                        onNavigate('RoutineEdit', { routineId: r.id });
+                      }}
+                    >
+                      Bearbeiten
+                    </button>
                   </div>
                   <div className="card__meta">
                     <span className="card__steps">

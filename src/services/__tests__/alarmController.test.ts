@@ -9,7 +9,9 @@ import {
   handleScanResult,
   handleAlarmFired,
   handleExtend,
+  handleConfirmDone,
   dismissCurrentRing,
+  fireOverdueAlarm,
 } from '../alarmController';
 import * as bridge from '../blockerBridge';
 
@@ -92,6 +94,7 @@ vi.mock('../blockerBridge', () => ({
   requestAudioFocus: vi.fn(() => Promise.resolve()),
   showAlarm: vi.fn(() => Promise.resolve()),
   addAlarmFiredListener: vi.fn(() => Promise.resolve(() => {})),
+  addAlarmConfirmedListener: vi.fn(() => Promise.resolve(() => {})),
 }));
 
 const scheduleExactAlarm = vi.mocked(bridge.scheduleExactAlarm);
@@ -194,6 +197,8 @@ describe('alarmController – handleScanResult (starting a routine)', () => {
       instance.id,
       NOW + 30 * MIN,
       ROUTINE_NAME,
+      undefined,
+      false, // full reminder mode (default)
     );
   });
 
@@ -211,15 +216,20 @@ describe('alarmController – handleScanResult (starting a routine)', () => {
     expect(instance.state).toBe('REMINDING');
     expect(instance.deadline).toBeNull();
 
-    // web-triggered alarm path for instant hints
+    // web-triggered alarm path for instant hints (full mode by default)
     expect(requestAudioFocus).toHaveBeenCalledTimes(1);
-    expect(showAlarm).toHaveBeenCalledWith('Herd-Erinnerung aktiviert', 0);
+    expect(showAlarm).toHaveBeenCalledWith(
+      'Herd-Erinnerung aktiviert',
+      0,
+      false,
+      instance.id,
+    );
     expect(scheduleExactAlarm).not.toHaveBeenCalled();
   });
 });
 
-describe('alarmController – early completion (scan during WAITING)', () => {
-  it('advances to the next delayed step and reschedules the alarm', async () => {
+describe('alarmController – scan on a running routine ends it completely', () => {
+  it('ends a multi-step WAITING routine: all remaining steps are confirmed at once', async () => {
     const steps: Step[] = [
       { id: 's1', label: 'Schritt 1', type: 'delayed_reminder', delayMinutes: 10 },
       { id: 's2', label: 'Schritt 2', type: 'delayed_reminder', delayMinutes: 30 },
@@ -230,27 +240,27 @@ describe('alarmController – early completion (scan during WAITING)', () => {
     const instanceId = firstInstance().id;
     expect(store.instances.get(instanceId)!.state).toBe('WAITING');
 
-    const result = await handleScanResult('qr-1'); // early confirm
-    // re-read: transitions are immutable, the store holds a NEW object
+    const result = await handleScanResult('qr-1'); // scan = end the routine
     const instance = store.instances.get(instanceId)!;
 
-    expect(result.status).toBe('step-completed');
-    expect(instance.currentStepIndex).toBe(1);
-    expect(instance.state).toBe('WAITING');
-    expect(instance.deadline).toBe(NOW + 30 * MIN);
+    expect(result.status).toBe('completed');
+    expect(result.message).toBe(`✓ "${ROUTINE_NAME}" beendet.`);
+    expect(instance.state).toBe('IDLE');
+    expect(instance.currentStepIndex).toBe(2); // walked past the last step
+    expect(instance.deadline).toBeNull();
     expect(instance.repeatCount).toBe(0);
+    expect(instance.completedAt).toBe(NOW);
 
-    // next alarm is scheduled (after cancelling the previous one)
-    expect(cancelAlarm).toHaveBeenCalledTimes(2);
-    expect(scheduleExactAlarm).toHaveBeenCalledTimes(2);
-    expect(scheduleExactAlarm).toHaveBeenLastCalledWith(
-      instance.id,
-      NOW + 30 * MIN,
-      ROUTINE_NAME,
-    );
+    // IDLE side effects: cancel + dismiss + release audio
+    // (dismiss ×2: once when WAITING was scheduled at start, once on IDLE)
+    expect(cancelAlarm).toHaveBeenLastCalledWith(instance.id);
+    expect(dismissAlarm).toHaveBeenCalledTimes(2);
+    expect(releaseAudioFocus).toHaveBeenCalledTimes(1);
+    // the second step's alarm is never scheduled
+    expect(scheduleExactAlarm).toHaveBeenCalledTimes(1);
   });
 
-  it('advances to an instant next step → REMINDING and shows the alarm', async () => {
+  it('ends a REMINDING routine whose next step would have been an instant hint', async () => {
     const steps: Step[] = [
       { id: 's1', label: 'Schritt 1', type: 'delayed_reminder', delayMinutes: 10 },
       { id: 's2', label: 'Sofort-Tipp', type: 'instant_hint', delayMinutes: 0 },
@@ -258,18 +268,26 @@ describe('alarmController – early completion (scan during WAITING)', () => {
     seedRoutine('routine-1', 'qr-1', steps);
 
     await handleScanResult('qr-1'); // start → WAITING on step 0
-    const result = await handleScanResult('qr-1'); // early confirm
+    const instanceId = firstInstance().id;
+    vi.setSystemTime(NOW + 10 * MIN);
+    await handleAlarmFired(instanceId, 0); // → REMINDING
 
-    const instance = firstInstance();
-    expect(result.status).toBe('confirmed');
-    expect(instance.state).toBe('REMINDING');
-    expect(instance.currentStepIndex).toBe(1);
-    expect(instance.deadline).toBeNull();
-    expect(requestAudioFocus).toHaveBeenCalledTimes(1);
-    expect(showAlarm).toHaveBeenCalledWith('Sofort-Tipp', 0);
+    const result = await handleScanResult('qr-1'); // scan = end the routine
+    const instance = store.instances.get(instanceId)!;
+
+    expect(result.status).toBe('completed');
+    expect(instance.state).toBe('IDLE');
+    expect(instance.completedAt).toBe(NOW + 10 * MIN);
+
+    // never shows the instant hint — it was confirmed away by the scan
+    expect(showAlarm).not.toHaveBeenCalled();
+    expect(cancelAlarm).toHaveBeenLastCalledWith(instance.id);
+    // dismiss ×2: once when WAITING was scheduled at start, once on IDLE
+    expect(dismissAlarm).toHaveBeenCalledTimes(2);
+    expect(releaseAudioFocus).toHaveBeenCalledTimes(1);
   });
 
-  it('completes the routine when the last step is confirmed early and cancels everything', async () => {
+  it('completes the routine when the last step is scanned and cancels everything', async () => {
     const steps: Step[] = [
       { id: 's1', label: 'Einziger Schritt', type: 'delayed_reminder', delayMinutes: 15 },
     ];
@@ -279,7 +297,7 @@ describe('alarmController – early completion (scan during WAITING)', () => {
     const instanceId = firstInstance().id;
     expect(store.instances.get(instanceId)!.state).toBe('WAITING');
 
-    const result = await handleScanResult('qr-1'); // early confirm → done
+    const result = await handleScanResult('qr-1'); // scan → done
     const instance = store.instances.get(instanceId)!;
 
     expect(result.status).toBe('completed');
@@ -289,9 +307,212 @@ describe('alarmController – early completion (scan during WAITING)', () => {
 
     // IDLE side effects: cancel + dismiss + release audio
     expect(cancelAlarm).toHaveBeenCalledWith(instance.id);
-    expect(dismissAlarm).toHaveBeenCalledTimes(1);
+    // dismiss ×2: once when WAITING was scheduled at start, once on IDLE
+    expect(dismissAlarm).toHaveBeenCalledTimes(2);
     expect(releaseAudioFocus).toHaveBeenCalledTimes(1);
     expect(scheduleExactAlarm).toHaveBeenCalledTimes(1); // only the initial one
+  });
+});
+
+describe('alarmController – handleConfirmDone ("Erledigt")', () => {
+  it('advances a REMINDING instance to the next WAITING step and schedules it', async () => {
+    const steps: Step[] = [
+      { id: 's1', label: 'Schritt 1', type: 'delayed_reminder', delayMinutes: 10 },
+      { id: 's2', label: 'Schritt 2', type: 'delayed_reminder', delayMinutes: 30 },
+    ];
+    seedRoutine('routine-1', 'qr-1', steps);
+    seedInstance({ state: 'REMINDING', repeatCount: 2 });
+
+    const updated = await handleConfirmDone('inst-1');
+
+    expect(updated!.state).toBe('WAITING');
+    expect(updated!.currentStepIndex).toBe(1);
+    expect(updated!.deadline).toBe(NOW + 30 * MIN);
+    expect(updated!.repeatCount).toBe(0); // confirmed → counter resets
+
+    // WAITING side effects: cancel the old chain, schedule the next step
+    expect(cancelAlarm).toHaveBeenCalledWith('inst-1');
+    expect(scheduleExactAlarm).toHaveBeenCalledWith(
+      'inst-1',
+      NOW + 30 * MIN,
+      ROUTINE_NAME,
+      undefined,
+      false,
+    );
+    // leftover native overlay is closed when advancing to WAITING
+    expect(dismissAlarm).toHaveBeenCalledTimes(1);
+    expect(releaseAudioFocus).not.toHaveBeenCalled();
+  });
+
+  it('advances to an instant next step → REMINDING and shows its alarm', async () => {
+    const steps: Step[] = [
+      { id: 's1', label: 'Schritt 1', type: 'delayed_reminder', delayMinutes: 10 },
+      { id: 's2', label: 'Sofort-Tipp', type: 'instant_hint', delayMinutes: 0 },
+    ];
+    seedRoutine('routine-1', 'qr-1', steps);
+    seedInstance({ state: 'REMINDING' });
+
+    const updated = await handleConfirmDone('inst-1');
+
+    expect(updated!.state).toBe('REMINDING');
+    expect(updated!.currentStepIndex).toBe(1);
+    expect(updated!.deadline).toBeNull();
+    expect(requestAudioFocus).toHaveBeenCalledTimes(1);
+    expect(showAlarm).toHaveBeenCalledWith('Sofort-Tipp', 0, false, 'inst-1');
+    expect(scheduleExactAlarm).not.toHaveBeenCalled();
+  });
+
+  it('completes the routine when confirming the last step (IDLE, cancel + dismiss + release)', async () => {
+    seedRoutine('routine-1', 'qr-1', [
+      { id: 's1', label: 'Einziger Schritt', type: 'delayed_reminder', delayMinutes: 15 },
+    ]);
+    seedInstance({ state: 'REMINDING', repeatCount: 1 });
+
+    const updated = await handleConfirmDone('inst-1');
+
+    expect(updated!.state).toBe('IDLE');
+    expect(updated!.completedAt).toBe(NOW);
+    expect(updated!.deadline).toBeNull();
+
+    // IDLE side effects: cancel + dismiss + release audio
+    expect(cancelAlarm).toHaveBeenCalledWith('inst-1');
+    expect(dismissAlarm).toHaveBeenCalledTimes(1);
+    expect(releaseAudioFocus).toHaveBeenCalledTimes(1);
+    expect(scheduleExactAlarm).not.toHaveBeenCalled();
+  });
+
+  it('returns null for an unknown instanceId and makes no native calls', async () => {
+    const updated = await handleConfirmDone('does-not-exist');
+
+    expect(updated).toBeNull();
+    expect(cancelAlarm).not.toHaveBeenCalled();
+    expect(scheduleExactAlarm).not.toHaveBeenCalled();
+    expect(dismissAlarm).not.toHaveBeenCalled();
+  });
+
+  it('returns a WAITING instance unchanged — stale-overlay guard (no event, no side effects)', async () => {
+    seedRoutine('routine-1', 'qr-1', [
+      { id: 's1', label: 'Schritt 1', type: 'delayed_reminder', delayMinutes: 10 },
+      { id: 's2', label: 'Schritt 2', type: 'delayed_reminder', delayMinutes: 30 },
+    ]);
+    const waiting = seedInstance({
+      state: 'WAITING',
+      deadline: NOW + 10 * MIN,
+    });
+
+    const updated = await handleConfirmDone('inst-1');
+
+    // unchanged: no SCAN_CONFIRM applied, nothing persisted
+    expect(updated).toEqual(waiting);
+    expect(store.instancePut).not.toHaveBeenCalled();
+    expect(cancelAlarm).not.toHaveBeenCalled();
+    expect(scheduleExactAlarm).not.toHaveBeenCalled();
+    expect(dismissAlarm).not.toHaveBeenCalled();
+    expect(releaseAudioFocus).not.toHaveBeenCalled();
+  });
+
+  it('returns an IDLE instance unchanged — stale-overlay guard (no event, no side effects)', async () => {
+    seedRoutine('routine-1', 'qr-1', [
+      { id: 's1', label: 'Schritt 1', type: 'delayed_reminder', delayMinutes: 10 },
+    ]);
+    const idle = seedInstance({ state: 'IDLE', completedAt: NOW });
+
+    const updated = await handleConfirmDone('inst-1');
+
+    expect(updated).toEqual(idle);
+    expect(store.instancePut).not.toHaveBeenCalled();
+    expect(cancelAlarm).not.toHaveBeenCalled();
+    expect(scheduleExactAlarm).not.toHaveBeenCalled();
+    expect(dismissAlarm).not.toHaveBeenCalled();
+    expect(releaseAudioFocus).not.toHaveBeenCalled();
+  });
+});
+
+describe('alarmController – soft reminder mode', () => {
+  it('starting with a soft instant hint shows a silent alarm and schedules the silent 60s chain', async () => {
+    const steps: Step[] = [
+      { id: 's1', label: 'Sanfter Tipp', type: 'instant_hint', delayMinutes: 0, reminderMode: 'soft' },
+      { id: 's2', label: 'Später', type: 'delayed_reminder', delayMinutes: 30 },
+    ];
+    seedRoutine('routine-1', 'qr-1', steps);
+
+    await handleScanResult('qr-1');
+    const instance = firstInstance();
+
+    expect(instance.state).toBe('REMINDING');
+    expect(instance.deadline).toBeNull();
+    expect(requestAudioFocus).toHaveBeenCalledTimes(1);
+    // silent = true on the alarm itself … (plus the instanceId)
+    expect(showAlarm).toHaveBeenCalledWith('Sanfter Tipp', 0, true, instance.id);
+    // … plus the native silent 60s repeat chain (repeat + escalation)
+    expect(scheduleExactAlarm).toHaveBeenCalledWith(
+      instance.id,
+      NOW + MIN,
+      'Sanfter Tipp',
+      0,
+      true,
+    );
+  });
+
+  it('passes silent=true when scheduling a WAITING soft step', async () => {
+    const steps: Step[] = [
+      { id: 's1', label: 'Sanft', type: 'delayed_reminder', delayMinutes: 30, reminderMode: 'soft' },
+    ];
+    seedRoutine('routine-1', 'qr-1', steps);
+
+    await handleScanResult('qr-1');
+    const instance = firstInstance();
+
+    expect(instance.state).toBe('WAITING');
+    expect(cancelAlarm).toHaveBeenCalledWith(instance.id);
+    expect(scheduleExactAlarm).toHaveBeenCalledWith(
+      instance.id,
+      NOW + 30 * MIN,
+      ROUTINE_NAME,
+      undefined,
+      true,
+    );
+  });
+});
+
+describe('alarmController – fireOverdueAlarm (healthCheck recovery)', () => {
+  it('shows a silent alarm WITH instanceId and schedules the silent chain for a soft step', async () => {
+    seedRoutine('routine-1', 'qr-1', [
+      { id: 's1', label: 'Sanfter Herd', type: 'delayed_reminder', delayMinutes: 30, reminderMode: 'soft' },
+    ]);
+    const instance = seedInstance({ state: 'REMINDING', repeatCount: 1 });
+
+    await fireOverdueAlarm(instance);
+
+    expect(requestAudioFocus).toHaveBeenCalledTimes(1);
+    // silent AND instanceId reach the native overlay
+    expect(showAlarm).toHaveBeenCalledWith('Sanfter Herd', 1, true, 'inst-1');
+    // … and the recovered 60s repeat chain is silent too
+    expect(scheduleExactAlarm).toHaveBeenCalledWith(
+      'inst-1',
+      NOW + MIN,
+      'Sanfter Herd',
+      1,
+      true,
+    );
+  });
+
+  it('shows a loud alarm with instanceId for a full step (silent = false)', async () => {
+    seedRoutine('routine-1', 'qr-1', [
+      { id: 's1', label: 'Lauter Herd', type: 'delayed_reminder', delayMinutes: 30 },
+    ]);
+    const instance = seedInstance({ state: 'REMINDING', repeatCount: 0 });
+
+    await fireOverdueAlarm(instance);
+
+    expect(showAlarm).toHaveBeenCalledWith('Lauter Herd', 0, false, 'inst-1');
+    expect(scheduleExactAlarm).toHaveBeenCalledWith(
+      'inst-1',
+      NOW + MIN,
+      'Lauter Herd',
+      0,
+      false,
+    );
   });
 });
 
@@ -384,15 +605,41 @@ describe('alarmController – handleExtend', () => {
     expect(updated!.extensionsUsed).toBe(1);
 
     expect(cancelAlarm).toHaveBeenCalledWith('inst-1');
-    // recovering an existing chain → current repeatCount is handed over
+    // recovering an existing chain → current repeatCount is handed over,
+    // silent re-derived from the step (full mode here)
     expect(scheduleExactAlarm).toHaveBeenCalledWith(
       'inst-1',
       extendAt + 5 * MIN,
       ROUTINE_NAME,
       2,
+      false,
     );
     expect(dismissAlarm).toHaveBeenCalledTimes(1);
     expect(releaseAudioFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes silent=true to scheduleExactAlarm when extending a soft step', async () => {
+    seedRoutine('routine-1', 'qr-1', [
+      { id: 's1', label: 'Sanft', type: 'delayed_reminder', delayMinutes: 10, reminderMode: 'soft' },
+    ]);
+    seedInstance({ state: 'REMINDING', repeatCount: 1 });
+
+    const extendAt = NOW + 2 * MIN;
+    vi.setSystemTime(extendAt);
+
+    const updated = await handleExtend('inst-1', 5);
+
+    expect(updated!.state).toBe('WAITING');
+    // cancelAlarm drops the native silent metadata → silent must be
+    // re-derived from the step and handed over explicitly
+    expect(cancelAlarm).toHaveBeenCalledWith('inst-1');
+    expect(scheduleExactAlarm).toHaveBeenCalledWith(
+      'inst-1',
+      extendAt + 5 * MIN,
+      ROUTINE_NAME,
+      1,
+      true,
+    );
   });
 
   it('returns null for an unknown instanceId and makes no native calls', async () => {
@@ -495,6 +742,8 @@ describe('alarmController – full lifecycle', () => {
       instanceId,
       NOW + 30 * MIN,
       ROUTINE_NAME,
+      undefined,
+      false,
     );
 
     // ── 2. Deadline reached → native fires → TIMER_FIRED → REMINDING ─────────
@@ -526,8 +775,10 @@ describe('alarmController – full lifecycle', () => {
         extendAt + 5 * MIN,
         ROUTINE_NAME,
         i === 1 ? 2 : 0,
+        false,
       );
-      expect(dismissAlarm).toHaveBeenCalledTimes(i);
+      // dismiss: once from the initial WAITING schedule + once per extend
+      expect(dismissAlarm).toHaveBeenCalledTimes(i + 1);
       expect(releaseAudioFocus).toHaveBeenCalledTimes(i);
 
       // the rescheduled snooze fires again → back to REMINDING
@@ -562,8 +813,9 @@ describe('alarmController – full lifecycle', () => {
     expect(instance.deadline).toBeNull();
 
     expect(cancelAlarm).toHaveBeenLastCalledWith(instanceId);
-    // dismiss/release once more on completion (on top of the 3 extends)
-    expect(dismissAlarm).toHaveBeenCalledTimes(MAX_EXTENSIONS + 1);
+    // dismiss/release once more on completion (initial WAITING schedule +
+    // 3 extends + final IDLE)
+    expect(dismissAlarm).toHaveBeenCalledTimes(MAX_EXTENSIONS + 2);
     expect(releaseAudioFocus).toHaveBeenCalledTimes(MAX_EXTENSIONS + 1);
     expect(scheduleExactAlarm).toHaveBeenCalledTimes(1 + MAX_EXTENSIONS); // no new schedule
   });

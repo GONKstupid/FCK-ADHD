@@ -188,6 +188,17 @@ class AlarmScheduler(private val context: Context) {
     fun getRepeatCount(instanceId: String): Int =
         prefs.getInt("repeat_$instanceId", 0)
 
+    /**
+     * Persists the silent flag for this instance. Silent alarms show the
+     * overlay without ringtone until the escalation threshold is reached.
+     */
+    fun persistSilent(instanceId: String, silent: Boolean) {
+        prefs.edit().putBoolean("silent_$instanceId", silent).apply()
+    }
+
+    fun getSilent(instanceId: String): Boolean =
+        prefs.getBoolean("silent_$instanceId", false)
+
     fun setEscalationRingtoneUri(uri: String?) {
         val editor = prefs.edit()
         if (uri == null) {
@@ -206,6 +217,7 @@ class AlarmScheduler(private val context: Context) {
             .remove("deadline_$instanceId")
             .remove("label_$instanceId")
             .remove("repeat_$instanceId")
+            .remove("silent_$instanceId")
             .apply()
     }
 

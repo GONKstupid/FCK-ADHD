@@ -54,8 +54,12 @@ class AlarmReceiver : BroadcastReceiver() {
             scheduler.getEscalationRingtoneUri()?.let { ringtoneUri = it }
         }
 
+        // Silent mode: overlay without ringtone — but ONLY until the
+        // escalation threshold. From repeat #3 on it is always a FULL alarm.
+        val silent = scheduler.getSilent(instanceId) && repeatCount < ESCALATION_THRESHOLD
+
         // 4. Start the foreground service first (keeps process alive).
-        AlarmForegroundService.start(context, label)
+        AlarmForegroundService.start(context, label, instanceId, silent, repeatCount)
 
         // Launch the full-screen alarm activity.
         val alarmIntent = Intent(context, AlarmActivity::class.java).apply {
@@ -63,6 +67,7 @@ class AlarmReceiver : BroadcastReceiver() {
             putExtra("label", label)
             putExtra("repeatCount", repeatCount)
             putExtra("instanceId", instanceId)
+            putExtra("silent", silent)
             ringtoneUri?.let { putExtra("ringtoneUri", it) }
         }
         context.startActivity(alarmIntent)

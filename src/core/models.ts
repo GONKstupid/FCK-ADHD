@@ -5,6 +5,12 @@ export interface Step {
   label: string;
   type: 'instant_hint' | 'delayed_reminder';
   delayMinutes: number; // 0 for instant hints
+  /**
+   * How the reminder presents itself.
+   * - 'full' (default when absent): full-screen alarm, sound, vibration.
+   * - 'soft': silent notification only — no sound, no full-screen takeover.
+   */
+  reminderMode?: 'soft' | 'full';
 }
 
 export interface Routine {
