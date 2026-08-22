@@ -14,6 +14,14 @@ export interface AlarmConfirmedEvent {
   instanceId: string;
 }
 
+/**
+ * Payload of the `alarmExtendRequested` event pushed by the native side.
+ * Emitted when the user taps "VERLÄNGERN" on the native alarm overlay.
+ */
+export interface AlarmExtendRequestedEvent {
+  instanceId: string;
+}
+
 export interface Ringtone {
   uri: string;
   title: string;
@@ -61,8 +69,13 @@ interface BlockerPluginInterface {
   canUseFullScreenIntent(): Promise<{ granted: boolean }>;
   checkNotificationPermission(): Promise<{ granted: boolean }>;
   requestNotificationPermission(): Promise<{ granted: boolean }>;
+  hasOverlayPermission(): Promise<{ granted: boolean }>;
   openExactAlarmSettings(): Promise<void>;
   openFullScreenIntentSettings(): Promise<void>;
+  openOverlaySettings(): Promise<void>;
+
+  // ── Pending extend request (native overlay → web) ──
+  consumePendingExtendRequest(): Promise<{ instanceId: string | null }>;
 
   // ── Escalation ringtone ──
   listRingtones(): Promise<{ ringtones: Ringtone[] }>;
@@ -82,6 +95,10 @@ interface BlockerPluginInterface {
   addListener(
     eventName: 'alarmConfirmed',
     listenerFunc: (event: AlarmConfirmedEvent) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'alarmExtendRequested',
+    listenerFunc: (event: AlarmExtendRequestedEvent) => void,
   ): Promise<PluginListenerHandle>;
 }
 
@@ -252,6 +269,17 @@ export async function requestNotificationPermission(): Promise<{
 }
 
 /**
+ * Whether the SYSTEM_ALERT_WINDOW / "display over other apps" permission
+ * is granted (needed so the alarm overlay can appear over other apps
+ * when the device is unlocked).
+ * On web, treated as not granted (overlay is a native-only concept).
+ */
+export async function hasOverlayPermission(): Promise<{ granted: boolean }> {
+  if (!isNative()) return { granted: false };
+  return BlockerNative.hasOverlayPermission();
+}
+
+/**
  * Opens the system settings page for exact alarms.
  * No-op on web.
  */
@@ -267,6 +295,30 @@ export async function openExactAlarmSettings(): Promise<void> {
 export async function openFullScreenIntentSettings(): Promise<void> {
   if (!isNative()) return;
   await BlockerNative.openFullScreenIntentSettings();
+}
+
+/**
+ * Opens the system settings page for "display over other apps".
+ * No-op on web.
+ */
+export async function openOverlaySettings(): Promise<void> {
+  if (!isNative()) return;
+  await BlockerNative.openOverlaySettings();
+}
+
+// ─── Pending extend request (native overlay → web) ─────────────────────
+
+/**
+ * Returns and clears a pending extend request queued by the native alarm
+ * overlay ("VERLÄNGERN" button). Used as a recovery path when the WebView
+ * was recreated and the `alarmExtendRequested` event was lost.
+ * Returns { instanceId: null } when nothing is pending or on web.
+ */
+export async function consumePendingExtendRequest(): Promise<{
+  instanceId: string | null;
+}> {
+  if (!isNative()) return { instanceId: null };
+  return BlockerNative.consumePendingExtendRequest();
 }
 
 // ─── Escalation ringtone ──────────────────────────────────────────────────────
@@ -344,6 +396,22 @@ export async function addAlarmConfirmedListener(
 ): Promise<() => void> {
   if (!isNative()) return () => {};
   const handle = await BlockerNative.addListener('alarmConfirmed', cb);
+  return () => {
+    void handle.remove();
+  };
+}
+
+/**
+ * Subscribes to the native `alarmExtendRequested` event. Native emits it
+ * when the user taps "VERLÄNGERN" on the native alarm overlay — the web
+ * layer then opens the extension flow for that instance.
+ * Returns an unsubscribe function. No-op on web.
+ */
+export async function addAlarmExtendRequestedListener(
+  cb: (event: AlarmExtendRequestedEvent) => void,
+): Promise<() => void> {
+  if (!isNative()) return () => {};
+  const handle = await BlockerNative.addListener('alarmExtendRequested', cb);
   return () => {
     void handle.remove();
   };

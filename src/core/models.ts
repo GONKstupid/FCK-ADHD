@@ -35,9 +35,15 @@ export interface RoutineInstance {
 
 // ─── State Machine Events ─────────────────────────────────────────────────────
 
+/**
+ * SCAN_CONFIRM carries `viaScan: true` only when the user physically
+ * scanned the QR code. Completing the LAST step of a routine requires a
+ * real scan — a plain confirm ("Erledigt" button / native alarmConfirmed)
+ * is a no-op on the last step.
+ */
 export type StateMachineEvent =
   | { type: 'SCAN_START' }
   | { type: 'TIMER_FIRED' }
-  | { type: 'SCAN_CONFIRM' }
+  | { type: 'SCAN_CONFIRM'; viaScan?: boolean }
   | { type: 'EXTEND'; durationMinutes: number }
   | { type: 'ESCALATE' };

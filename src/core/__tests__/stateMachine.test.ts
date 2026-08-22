@@ -119,12 +119,39 @@ describe('State Machine – transition()', () => {
       expect(result.deadline).toBeNull();
     });
 
-    it('completes the routine when last step is confirmed', () => {
+    it('advances non-last steps identically with viaScan: true', () => {
+      const instance = makeRemindingInstance(0);
+      const result = transition(
+        instance,
+        { type: 'SCAN_CONFIRM', viaScan: true },
+        steps,
+        NOW,
+      );
+      expect(result.state).toBe('WAITING');
+      expect(result.currentStepIndex).toBe(1);
+      expect(result.deadline).toBe(NOW + 30 * 60_000);
+      expect(result.repeatCount).toBe(0);
+    });
+
+    it('completes the routine when the last step is confirmed via QR scan (viaScan: true)', () => {
       const instance = makeRemindingInstance(1); // on the last step
-      const result = transition(instance, { type: 'SCAN_CONFIRM' }, steps, NOW);
+      const result = transition(
+        instance,
+        { type: 'SCAN_CONFIRM', viaScan: true },
+        steps,
+        NOW,
+      );
       expect(result.state).toBe('IDLE');
       expect(result.completedAt).toBe(NOW);
       expect(result.currentStepIndex).toBe(2);
+    });
+
+    it('does NOT complete on the last step without viaScan ("Erledigt" is a no-op)', () => {
+      const instance = makeRemindingInstance(1); // on the last step
+      const result = transition(instance, { type: 'SCAN_CONFIRM' }, steps, NOW);
+      expect(result).toBe(instance); // same reference — no change
+      expect(result.state).toBe('REMINDING'); // alarm keeps repeating
+      expect(result.completedAt).toBeNull();
     });
 
     it('is a no-op from IDLE state', () => {
@@ -132,13 +159,26 @@ describe('State Machine – transition()', () => {
       expect(result.state).toBe('IDLE');
     });
 
-    it('completes the current step early from WAITING state (user finished faster)', () => {
-      // makeWaitingInstance() sits on step 1 (the last step) — confirm advances past it
+    it('completes the current step early from WAITING state when scanned (user finished faster)', () => {
+      // makeWaitingInstance() sits on step 1 (the last step) — a scan ends it
       const instance = makeWaitingInstance();
-      const result = transition(instance, { type: 'SCAN_CONFIRM' }, steps, NOW);
+      const result = transition(
+        instance,
+        { type: 'SCAN_CONFIRM', viaScan: true },
+        steps,
+        NOW,
+      );
       expect(result.state).toBe('IDLE');
       expect(result.completedAt).toBe(NOW);
       expect(result.currentStepIndex).toBe(2);
+    });
+
+    it('does NOT complete from WAITING on the last step without viaScan', () => {
+      const instance = makeWaitingInstance(); // WAITING on the last step
+      const result = transition(instance, { type: 'SCAN_CONFIRM' }, steps, NOW);
+      expect(result).toBe(instance); // same reference — no change
+      expect(result.state).toBe('WAITING');
+      expect(result.completedAt).toBeNull();
     });
 
     it('advances from WAITING to the next step with a new deadline', () => {
@@ -150,7 +190,7 @@ describe('State Machine – transition()', () => {
       expect(result.repeatCount).toBe(0);
     });
 
-    it('completes the instance when SCAN_CONFIRM fires during WAITING on the last step', () => {
+    it('completes the instance when a SCAN_CONFIRM via scan fires during WAITING on the last step', () => {
       const singleStep: Step[] = [
         { id: 'only', label: 'Only step', type: 'delayed_reminder', delayMinutes: 15 },
       ];
@@ -160,7 +200,12 @@ describe('State Machine – transition()', () => {
         currentStepIndex: 0,
         deadline: NOW + 15 * 60_000,
       };
-      const result = transition(instance, { type: 'SCAN_CONFIRM' }, singleStep, NOW);
+      const result = transition(
+        instance,
+        { type: 'SCAN_CONFIRM', viaScan: true },
+        singleStep,
+        NOW,
+      );
       expect(result.state).toBe('IDLE');
       expect(result.completedAt).toBe(NOW);
       expect(result.deadline).toBeNull();
@@ -299,8 +344,13 @@ describe('State Machine – transition()', () => {
       expect(inst.currentStepIndex).toBe(2);
       expect(inst.repeatCount).toBe(0);
 
-      // SCAN_CONFIRM → IDLE (completed — past last step)
-      inst = transition(inst, { type: 'SCAN_CONFIRM' }, multiSteps, NOW);
+      // SCAN_CONFIRM (scan) → IDLE (completed — past last step, viaScan required)
+      inst = transition(
+        inst,
+        { type: 'SCAN_CONFIRM', viaScan: true },
+        multiSteps,
+        NOW,
+      );
       expect(inst.state).toBe('IDLE');
       expect(inst.completedAt).toBe(NOW);
     });

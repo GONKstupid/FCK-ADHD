@@ -46,7 +46,7 @@ export function transition(
       return { ...instance, state: 'REMINDING', repeatCount: 0 };
     }
 
-    // ── User confirms (scans QR again) → advance or complete ─────────────────
+    // ── User confirms (scans QR again / presses "Erledigt") → advance ────────
     case 'SCAN_CONFIRM': {
       // Allowed from REMINDING (alarm ringing) and WAITING (user finished the
       // step faster than planned — a scan during WAITING ends it immediately).
@@ -57,6 +57,12 @@ export function transition(
       const nextIndex = instance.currentStepIndex + 1;
 
       if (nextIndex >= steps.length) {
+        // Completing the routine REQUIRES a QR scan (viaScan === true).
+        // A plain "Erledigt" on the last step confirms nothing state-wise —
+        // the instance stays put and the alarm keeps repeating until the
+        // user scans the QR code to end the routine.
+        if (event.viaScan !== true) return instance;
+
         // All steps done — mark complete and return to IDLE
         return {
           ...instance,

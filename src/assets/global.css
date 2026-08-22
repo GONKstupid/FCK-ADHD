@@ -588,6 +588,45 @@ body.barcode-scanner-active .btn--scan {
   z-index: 3;
 }
 
+/*
+ * Floating cancel control — only rendered while scanning. The webview is
+ * transparent over the native camera preview, so the button carries its
+ * own opaque background instead of relying on inherited layers.
+ */
+.scanner-cancel {
+  position: fixed;
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 2rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-off-white);
+  background: var(--color-near-black);
+  border: 1px solid var(--paper-border);
+  border-radius: 999px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+
+.scanner-cancel:hover {
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+}
+
+.scanner-cancel:active {
+  transform: translateX(-50%) scale(0.96);
+}
+
 /* ─── Scan feedback ──────────────────────────────────────────────────────────── */
 .scan-feedback {
   font-family: var(--font-mono);

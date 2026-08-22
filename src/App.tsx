@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import DashboardScreen from './ui/screens/DashboardScreen';
 import ScannerScreen from './ui/screens/ScannerScreen';
 import QRExportScreen from './ui/screens/QRExportScreen';
@@ -16,7 +16,12 @@ import {
   stopAlarmConfirmedListener,
   stopAlarmFiredListener,
 } from './services/alarmController';
-import { getRoutineById } from './services/routineService';
+import { getInstance, getRoutineById } from './services/routineService';
+import {
+  addAlarmExtendRequestedListener,
+  consumePendingExtendRequest,
+  isNative,
+} from './services/blockerBridge';
 
 // ─── Simple state-based router ──────────────────────────────────────────────────
 
@@ -42,6 +47,11 @@ function App() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
+  // Mirrors the current route for event listeners that must not
+  // overwrite an in-progress flow (e.g. the 60s alarm repeat).
+  const routeRef = useRef<Route>(route);
+  routeRef.current = route;
+
   // ── Onboarding check ────────────────────────────────────────────────────────
   useEffect(() => {
     void isOnboardingComplete().then(setOnboardingDone);
@@ -60,6 +70,9 @@ function App() {
     void startAlarmFiredListener((instance) => {
       if (instance.state !== 'REMINDING') return;
       if (document.visibilityState !== 'visible') return;
+      // A 60s repeat must not overwrite an in-progress extension flow —
+      // the extension would be lost mid-way.
+      if (routeRef.current.name === 'Extension') return;
       void getRoutineById(instance.routineId).then((routine) => {
         setRoute({
           name: 'Alarm',
@@ -91,6 +104,53 @@ function App() {
     return () => {
       void stopAlarmConfirmedListener();
     };
+  }, []);
+
+  // ── Native alarmExtendRequested event channel ─────────────────────────────
+  // The native alarm overlay emits it when the user taps "VERLÄNGERN" —
+  // we open the extension flow for that instance.
+  useEffect(() => {
+    let active = true;
+    let unsubscribe: (() => void) | null = null;
+    void addAlarmExtendRequestedListener((event) => {
+      setRoute({ name: 'Extension', instanceId: event.instanceId });
+    }).then((un) => {
+      if (active) unsubscribe = un;
+      else un();
+    });
+    return () => {
+      active = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  // ── Pending extend request recovery (WebView recreated) ───────────────────
+  // If the WebView was restarted, the alarmExtendRequested event is lost —
+  // on becoming visible again we poll the native pending-request queue.
+  useEffect(() => {
+    if (!isNative()) return;
+    const consumePending = () => {
+      void consumePendingExtendRequest().then(async ({ instanceId }) => {
+        if (!instanceId) return;
+        // Staleness guard: a persisted request can survive process
+        // death — only open the extension flow while the instance still
+        // exists AND is ringing. A stale request for a completed/
+        // vanished instance must not force-open the screen.
+        const instance = await getInstance(instanceId);
+        if (!instance || instance.state !== 'REMINDING') return;
+        setRoute({ name: 'Extension', instanceId });
+      });
+    };
+    // Cold start: the document is already visible, so no
+    // visibilitychange fires — consume a persisted pending request now.
+    consumePending();
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      consumePending();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () =>
+      document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
   // ── Theme ──────────────────────────────────────────────────────────────────

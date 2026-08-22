@@ -101,6 +101,24 @@ export async function completeInstance(id: string): Promise<void> {
   });
 }
 
+/**
+ * Returns the most recently completed instance of a routine (or null).
+ * Used to enforce the restart cooldown after a routine was ended by scan.
+ */
+export async function getLatestCompletedInstance(
+  routineId: string,
+): Promise<RoutineInstance | null> {
+  const completed = await db.instances
+    .where('routineId')
+    .equals(routineId)
+    .filter((inst) => inst.completedAt != null)
+    .toArray();
+  if (completed.length === 0) return null;
+  return completed.sort(
+    (a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0),
+  )[0];
+}
+
 // ─── Transition helper ─────────────────────────────────────────────────────────
 
 /**

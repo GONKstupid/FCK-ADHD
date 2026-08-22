@@ -65,6 +65,87 @@ class BlockerPlugin : Plugin() {
 
         private val mainHandler = Handler(Looper.getMainLooper())
 
+        /**
+         * Pending "VERLÄNGERN" request: kept in memory AND persisted so the
+         * web layer can consume it even if the `alarmExtendRequested` event
+         * arrives before its listener is registered (or the WebView was
+         * restarted in between).
+         */
+        private const val EXTEND_PREFS_NAME = "fckadhd_pending_extend"
+        private const val KEY_PENDING_EXTEND = "pending_extend_instance"
+        private const val KEY_PENDING_EXTEND_TIMESTAMP = "pending_extend_timestamp"
+
+        /** Pending extend requests older than this are treated as stale/absent. */
+        private const val EXTEND_REQUEST_MAX_AGE_MS = 5 * 60 * 1000L
+
+        /**
+         * Guards the read→resolve→clear cycle of the pending extend request:
+         * @PluginMethod runs on Capacitor's background executor, so without
+         * this lock two overlapping consumePendingExtendRequest calls could
+         * return the same instanceId twice.
+         */
+        private val pendingExtendLock = Any()
+
+        @Volatile
+        private var pendingExtendInstanceId: String? = null
+
+        @Volatile
+        private var pendingExtendTimestamp: Long = 0L
+
+        /**
+         * Stores the pending extend request (native button in AlarmActivity
+         * or the SYSTEM_ALERT_WINDOW overlay → web layer consumes it) together
+         * with a timestamp so [consumePendingExtendRequest] can drop stale
+         * leftovers from a previous app run.
+         */
+        fun setPendingExtendRequest(context: Context, instanceId: String) {
+            val now = System.currentTimeMillis()
+            synchronized(pendingExtendLock) {
+                pendingExtendInstanceId = instanceId
+                pendingExtendTimestamp = now
+                context.applicationContext
+                    .getSharedPreferences(EXTEND_PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_PENDING_EXTEND, instanceId)
+                    .putLong(KEY_PENDING_EXTEND_TIMESTAMP, now)
+                    .apply()
+            }
+        }
+
+        /**
+         * Atomically reads and clears the pending extend request. Returns the
+         * instanceId only when the stored entry is younger than 5 minutes;
+         * stale entries (e.g. surviving an app restart) are cleared and
+         * reported as absent.
+         */
+        fun consumePendingExtendRequest(context: Context): String? {
+            return synchronized(pendingExtendLock) {
+                val prefs = context.applicationContext
+                    .getSharedPreferences(EXTEND_PREFS_NAME, Context.MODE_PRIVATE)
+                val storedId = pendingExtendInstanceId ?: prefs.getString(KEY_PENDING_EXTEND, null)
+                val storedAt = if (pendingExtendInstanceId != null) {
+                    pendingExtendTimestamp
+                } else {
+                    prefs.getLong(KEY_PENDING_EXTEND_TIMESTAMP, 0L)
+                }
+
+                // Consume: clear in-memory values and persisted copies while
+                // still holding the lock — no second caller can observe them.
+                pendingExtendInstanceId = null
+                pendingExtendTimestamp = 0L
+                prefs.edit()
+                    .remove(KEY_PENDING_EXTEND)
+                    .remove(KEY_PENDING_EXTEND_TIMESTAMP)
+                    .apply()
+
+                if (storedId != null && System.currentTimeMillis() - storedAt < EXTEND_REQUEST_MAX_AGE_MS) {
+                    storedId
+                } else {
+                    null
+                }
+            }
+        }
+
         /** Emits `alarmFired` { instanceId: string, repeatCount: number } to the web layer. */
         fun emitAlarmFired(instanceId: String, repeatCount: Int) {
             mainHandler.post {
@@ -95,6 +176,21 @@ class BlockerPlugin : Plugin() {
                 }
             }
         }
+
+        /** Emits `alarmExtendRequested` { instanceId: string } to the web layer. */
+        fun emitAlarmExtendRequested(instanceId: String) {
+            mainHandler.post {
+                synchronized(instances) {
+                    instances.removeAll { it.get() == null }
+                    for (ref in instances) {
+                        val plugin = ref.get() ?: continue
+                        val data = JSObject()
+                        data.put("instanceId", instanceId)
+                        plugin.notifyListeners("alarmExtendRequested", data)
+                    }
+                }
+            }
+        }
     }
 
     override fun load() {
@@ -102,7 +198,7 @@ class BlockerPlugin : Plugin() {
     }
 
     private val audioController: AudioController by lazy {
-        AudioController(context)
+        AudioController.getInstance(context)
     }
 
     private val alarmScheduler: AlarmScheduler by lazy {
@@ -215,6 +311,61 @@ class BlockerPlugin : Plugin() {
         val result = JSObject()
         result.put("scheduled", scheduled)
         call.resolve(result)
+    }
+
+    // ── Pending extend request ──────────────────────────────────────────────
+
+    /**
+     * Resolves { instanceId: string | null } with the pending extend request
+     * set by the native "VERLÄNGERN" button, then clears both the in-memory
+     * value and the persisted copy. `instanceId` is JSONObject.NULL when no
+     * request is pending.
+     */
+    @PluginMethod
+    fun consumePendingExtendRequest(call: PluginCall) {
+        val pending = consumePendingExtendRequest(context)
+
+        val result = JSObject()
+        if (pending == null) {
+            result.put("instanceId", JSONObject.NULL)
+        } else {
+            result.put("instanceId", pending)
+        }
+
+        call.resolve(result)
+    }
+
+    // ── Permissions: overlay (SYSTEM_ALERT_WINDOW) ─────────────────────────
+
+    /** Resolves { granted: boolean } for the SYSTEM_ALERT_WINDOW permission. */
+    @PluginMethod
+    fun hasOverlayPermission(call: PluginCall) {
+        val granted = Settings.canDrawOverlays(context)
+
+        val result = JSObject()
+        result.put("granted", granted)
+        call.resolve(result)
+    }
+
+    /** Opens the system screen to grant SYSTEM_ALERT_WINDOW. */
+    @PluginMethod
+    fun openOverlaySettings(call: PluginCall) {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}"),
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+        } catch (e: android.content.ActivityNotFoundException) {
+            // No settings activity on this device — resolve anyway so the
+            // JS promise never hangs.
+            android.util.Log.w("BlockerPlugin", "Overlay settings activity not found", e)
+        } catch (e: Exception) {
+            android.util.Log.w("BlockerPlugin", "Failed to open overlay settings", e)
+        }
+        call.resolve()
     }
 
     // ── Permissions: notifications ───────────────────────────────────────────

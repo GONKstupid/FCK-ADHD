@@ -8,8 +8,10 @@ import {
   canUseFullScreenIntent,
   checkNotificationPermission,
   requestNotificationPermission,
+  hasOverlayPermission,
   openExactAlarmSettings,
   openFullScreenIntentSettings,
+  openOverlaySettings,
 } from '../../services/blockerBridge';
 import type { Ringtone } from '../../services/blockerBridge';
 import GlyphStrip from '../components/GlyphStrip';
@@ -21,8 +23,9 @@ interface Props {
 /**
  * Settings screen (German).
  * (a) Escalation ringtone selection (native only).
- * (b) Permission status: notifications + exact alarms + full-screen intents,
- *     with shortcuts into the system settings.
+ * (b) Permission status: notifications + exact alarms + full-screen intents
+ *     + "Über anderen Apps einblenden", with shortcuts into the system
+ *     settings.
  */
 export default function SettingsScreen({ onBack }: Props) {
   const native = isNative();
@@ -40,24 +43,28 @@ export default function SettingsScreen({ onBack }: Props) {
   const [notificationGranted, setNotificationGranted] = useState<
     boolean | null
   >(null);
+  const [overlayGranted, setOverlayGranted] = useState<boolean | null>(null);
 
   useEffect(() => {
     let mounted = true;
     void (async () => {
       try {
-        const [tones, current, exact, fsi, notif] = await Promise.all([
-          listRingtones(),
-          getEscalationRingtone(),
-          hasExactAlarmPermission(),
-          canUseFullScreenIntent(),
-          checkNotificationPermission(),
-        ]);
+        const [tones, current, exact, fsi, notif, overlay] =
+          await Promise.all([
+            listRingtones(),
+            getEscalationRingtone(),
+            hasExactAlarmPermission(),
+            canUseFullScreenIntent(),
+            checkNotificationPermission(),
+            hasOverlayPermission(),
+          ]);
         if (!mounted) return;
         setRingtones(tones.ringtones);
         setCurrentUri(current.uri);
         setExactAlarmGranted(exact.granted);
         setFullScreenGranted(fsi.granted);
         setNotificationGranted(notif.granted);
+        setOverlayGranted(overlay.granted);
       } catch (err) {
         console.error('[SettingsScreen] failed to load settings:', err);
       } finally {
@@ -70,14 +77,16 @@ export default function SettingsScreen({ onBack }: Props) {
   }, []);
 
   const refreshPermissions = useCallback(async () => {
-    const [exact, fsi, notif] = await Promise.all([
+    const [exact, fsi, notif, overlay] = await Promise.all([
       hasExactAlarmPermission(),
       canUseFullScreenIntent(),
       checkNotificationPermission(),
+      hasOverlayPermission(),
     ]);
     setExactAlarmGranted(exact.granted);
     setFullScreenGranted(fsi.granted);
     setNotificationGranted(notif.granted);
+    setOverlayGranted(overlay.granted);
   }, []);
 
   // Re-check when the user returns from the system settings screen.
@@ -214,10 +223,28 @@ export default function SettingsScreen({ onBack }: Props) {
                 )}
               </div>
 
-              <div className="settings-row">
+              {/* Fehlende Vollbild-Berechtigung ist kritisch für den
+                  Alarm — die Zeile wird deshalb als Warnung hervorgehoben. */}
+              <div
+                className="settings-row"
+                style={
+                  native && fullScreenGranted === false
+                    ? {
+                        border: '1px solid #c78500',
+                        borderBottom: '1px solid #c78500',
+                        borderRadius: '6px',
+                        padding: '0.625rem',
+                        background:
+                          'color-mix(in srgb, #c78500 8%, transparent)',
+                      }
+                    : undefined
+                }
+              >
                 <div className="settings-row__info">
                   <span className="settings-row__label">
-                    Vollbild-Benachrichtigung
+                    {native && fullScreenGranted === false
+                      ? '⚠ Vollbild-Benachrichtigung'
+                      : 'Vollbild-Benachrichtigung'}
                   </span>
                   {permissionBadge(native ? fullScreenGranted : true)}
                 </div>
@@ -232,6 +259,32 @@ export default function SettingsScreen({ onBack }: Props) {
                   >
                     In Systemeinstellungen öffnen
                   </button>
+                )}
+              </div>
+
+              <div className="settings-row">
+                <div className="settings-row__info">
+                  <span className="settings-row__label">
+                    Über anderen Apps einblenden
+                  </span>
+                  {permissionBadge(native ? overlayGranted : true)}
+                </div>
+                {native && overlayGranted === false && (
+                  <>
+                    <p className="settings-hint">
+                      Wird benötigt, damit sich der Alarm auch über anderen
+                      Apps bemerkbar machen kann, wenn das Gerät entsperrt
+                      ist.
+                    </p>
+                    <button
+                      className="btn btn--secondary settings-row__action"
+                      onClick={() =>
+                        void openOverlaySettings().then(refreshPermissions)
+                      }
+                    >
+                      In Systemeinstellungen öffnen
+                    </button>
+                  </>
                 )}
               </div>
 

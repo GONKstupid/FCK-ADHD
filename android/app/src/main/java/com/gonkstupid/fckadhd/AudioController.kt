@@ -9,15 +9,39 @@ import android.os.Build
 /**
  * Manages audio focus on STREAM_ALARM.
  * Requests AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE for the duration of an alarm.
+ *
+ * Singleton: AlarmForegroundService and BlockerPlugin MUST share the same
+ * instance, otherwise a releaseFocus() from a second instance is a no-op
+ * and other apps' audio (e.g. YouTube) never resumes after the alarm.
  */
-class AudioController(private val context: Context) {
+class AudioController private constructor(private val context: Context) {
+
+    companion object {
+        @Volatile
+        private var instance: AudioController? = null
+
+        /** Returns the single shared AudioController instance. */
+        fun getInstance(context: Context): AudioController {
+            return instance ?: synchronized(this) {
+                instance ?: AudioController(context.applicationContext).also { instance = it }
+            }
+        }
+    }
 
     private val audioManager: AudioManager =
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     private var focusRequest: AudioFocusRequest? = null
+
+    /**
+     * Read/modified from both the main thread (AlarmForegroundService) and
+     * Capacitor executor threads — @Volatile for visibility, and both
+     * accessors are @Synchronized so request/abandon pairs stay consistent.
+     */
+    @Volatile
     private var hasFocus = false
 
+    @Synchronized
     fun requestFocus() {
         if (hasFocus) return
 
@@ -48,6 +72,7 @@ class AudioController(private val context: Context) {
         hasFocus = true
     }
 
+    @Synchronized
     fun releaseFocus() {
         if (!hasFocus) return
 

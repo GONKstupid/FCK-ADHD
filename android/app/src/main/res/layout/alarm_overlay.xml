@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Full-screen SYSTEM_ALERT_WINDOW overlay shown by AlarmForegroundService
+     when AlarmActivity could not be launched (background activity launch
+     restrictions). Mirrors the dark alarm screen design of activity_alarm.xml. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -14,7 +17,7 @@
         android:padding="32dp">
 
         <TextView
-            android:id="@+id/alarm_label"
+            android:id="@+id/overlay_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="center"
@@ -23,7 +26,7 @@
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/alarm_repeat"
+            android:id="@+id/overlay_repeat"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
@@ -41,7 +44,7 @@
             android:textSize="14sp" />
 
         <TextView
-            android:id="@+id/btn_extend"
+            android:id="@+id/overlay_extend"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
@@ -54,7 +57,7 @@
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/btn_confirm_hold"
+            android:id="@+id/overlay_confirm_hold"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"

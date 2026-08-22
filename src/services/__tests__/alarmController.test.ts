@@ -3,6 +3,7 @@ import type { Routine, RoutineInstance, Step } from '../../core/models';
 import {
   ESCALATION_AFTER_REPEATS,
   MAX_EXTENSIONS,
+  SCAN_RESTART_COOLDOWN_MS,
 } from '../../core/constants';
 import { shouldEscalate } from '../escalationService';
 import {
@@ -68,6 +69,16 @@ const store = vi.hoisted(() => {
         filter: (pred: (i: RoutineInstance) => boolean) => ({
           first: () =>
             Promise.resolve([...instances.values()].find(pred)),
+        }),
+      }),
+      equals: (value: string) => ({
+        filter: (pred: (i: RoutineInstance) => boolean) => ({
+          toArray: () =>
+            Promise.resolve(
+              [...instances.values()].filter(
+                (i) => i.routineId === value && pred(i),
+              ),
+            ),
         }),
       }),
     }),
@@ -314,6 +325,61 @@ describe('alarmController – scan on a running routine ends it completely', () 
   });
 });
 
+describe('alarmController – scan restart cooldown', () => {
+  const singleStep: Step[] = [
+    { id: 's1', label: 'Einziger Schritt', type: 'delayed_reminder', delayMinutes: 15 },
+  ];
+
+  it('blocks a re-scan within the cooldown after completion (no new instance)', async () => {
+    seedRoutine('routine-1', 'qr-1', singleStep);
+
+    await handleScanResult('qr-1'); // start → WAITING
+    const done = await handleScanResult('qr-1'); // scan → completed
+    expect(done.status).toBe('completed');
+    expect(store.instances.size).toBe(1);
+
+    // A double-scan right after completion must NOT restart the routine
+    vi.setSystemTime(NOW + 5_000);
+    const blocked = await handleScanResult('qr-1');
+
+    expect(blocked.status).toBe('completed'); // success-ish styling, no new status
+    expect(blocked.message).toBe(
+      'Routine wurde gerade erst beendet – Neustart blockiert.',
+    );
+    expect(store.instances.size).toBe(1); // no new instance created
+    expect(showAlarm).not.toHaveBeenCalled();
+  });
+
+  it('blocks a restart just before the cooldown expires (boundary)', async () => {
+    seedRoutine('routine-1', 'qr-1', singleStep);
+
+    await handleScanResult('qr-1');
+    await handleScanResult('qr-1'); // completed at NOW
+
+    vi.setSystemTime(NOW + SCAN_RESTART_COOLDOWN_MS - 1);
+    const blocked = await handleScanResult('qr-1');
+
+    expect(blocked.status).toBe('completed');
+    expect(blocked.message).toBe(
+      'Routine wurde gerade erst beendet – Neustart blockiert.',
+    );
+    expect(store.instances.size).toBe(1);
+  });
+
+  it('allows a fresh start once the cooldown has passed', async () => {
+    seedRoutine('routine-1', 'qr-1', singleStep);
+
+    await handleScanResult('qr-1');
+    await handleScanResult('qr-1'); // completed at NOW
+
+    vi.setSystemTime(NOW + SCAN_RESTART_COOLDOWN_MS);
+    const restarted = await handleScanResult('qr-1');
+
+    expect(restarted.status).toBe('started');
+    expect(store.instances.size).toBe(2); // a fresh instance was created
+  });
+});
+
 describe('alarmController – handleConfirmDone ("Erledigt")', () => {
   it('advances a REMINDING instance to the next WAITING step and schedules it', async () => {
     const steps: Step[] = [
@@ -362,23 +428,29 @@ describe('alarmController – handleConfirmDone ("Erledigt")', () => {
     expect(scheduleExactAlarm).not.toHaveBeenCalled();
   });
 
-  it('completes the routine when confirming the last step (IDLE, cancel + dismiss + release)', async () => {
+  it('does NOT complete the routine when confirming the LAST step — ending requires a QR scan', async () => {
     seedRoutine('routine-1', 'qr-1', [
       { id: 's1', label: 'Einziger Schritt', type: 'delayed_reminder', delayMinutes: 15 },
     ]);
-    seedInstance({ state: 'REMINDING', repeatCount: 1 });
+    const reminding = seedInstance({ state: 'REMINDING', repeatCount: 1 });
 
     const updated = await handleConfirmDone('inst-1');
 
-    expect(updated!.state).toBe('IDLE');
-    expect(updated!.completedAt).toBe(NOW);
-    expect(updated!.deadline).toBeNull();
+    // State-machine no-op on the last step: not completed, no state change
+    expect(updated!.state).toBe('REMINDING');
+    expect(updated!.completedAt).toBeNull();
+    expect(updated!.currentStepIndex).toBe(0);
+    expect(store.instances.get('inst-1')).toEqual(reminding);
 
-    // IDLE side effects: cancel + dismiss + release audio
-    expect(cancelAlarm).toHaveBeenCalledWith('inst-1');
+    // But "ERLEDIGT" silences the CURRENT ring — the 60s repeat chain
+    // keeps the alarm coming back until the QR code is scanned
     expect(dismissAlarm).toHaveBeenCalledTimes(1);
     expect(releaseAudioFocus).toHaveBeenCalledTimes(1);
+
+    // No other side effects — nothing is rescheduled or re-shown
+    expect(cancelAlarm).not.toHaveBeenCalled();
     expect(scheduleExactAlarm).not.toHaveBeenCalled();
+    expect(showAlarm).not.toHaveBeenCalled();
   });
 
   it('returns null for an unknown instanceId and makes no native calls', async () => {

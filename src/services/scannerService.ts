@@ -25,6 +25,25 @@ export function resetDebounce(): void {
   lastScannedAt = 0;
 }
 
+// ─── Cancellation ───────────────────────────────────────────────────────────────
+
+/**
+ * Reference to the currently pending native scan's cancel routine.
+ * Set while startScan() is in flight; cleared on every settle path.
+ */
+let cancelCurrentScan: (() => void) | null = null;
+
+/**
+ * Cancels an in-flight native scan (stops the camera, rejects the
+ * startScan() promise with 'Scan cancelled'). No-op on web or when
+ * no scan is active.
+ */
+export function cancelScan(): void {
+  if (cancelCurrentScan) {
+    cancelCurrentScan();
+  }
+}
+
 // ─── Platform detection ─────────────────────────────────────────────────────────
 
 function isNativePlatform(): boolean {
@@ -74,9 +93,20 @@ export async function startScan(): Promise<string> {
     let settled = false;
 
     async function cleanup() {
+      cancelCurrentScan = null;
       if (listenerHandle) await listenerHandle.remove();
       if (errorHandle) await errorHandle.remove();
     }
+
+    cancelCurrentScan = () => {
+      if (settled) return;
+      settled = true;
+      cancelCurrentScan = null;
+      BarcodeScanner.stopScan().catch(() => {
+        // silently ignore — scan may already be stopped
+      });
+      void cleanup().then(() => reject(new Error('Scan cancelled')));
+    };
 
     void (async () => {
       try {
@@ -108,11 +138,13 @@ export async function startScan(): Promise<string> {
         errorHandle = await BarcodeScanner.addListener('scanError', () => {
           if (settled) return;
           settled = true;
+          cancelCurrentScan = null;
           void cleanup().then(() => reject(new Error('Scan failed')));
         });
 
         await BarcodeScanner.startScan({ formats: [BarcodeFormat.QrCode] });
       } catch {
+        cancelCurrentScan = null;
         if (!settled) {
           settled = true;
           await cleanup();

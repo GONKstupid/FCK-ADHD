@@ -2,12 +2,10 @@ package com.gonkstupid.fckadhd
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
-import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import com.gonkstupid.fckadhd.plugins.BlockerPlugin
@@ -15,9 +13,12 @@ import com.gonkstupid.fckadhd.plugins.BlockerPlugin
 /**
  * Full-screen alarm activity that shows over the lock screen.
  * Displays the routine label and repeat count with a dark background.
- * Triggers ringtone and vibration via AlarmRingtoneManager — unless the
- * alarm runs in silent mode (overlay only, no sound; from repeat #3 on
- * the escalation threshold forces a FULL alarm).
+ *
+ * DISPLAY-ONLY: ringtone, vibration and audio focus are owned by
+ * AlarmForegroundService (started here and from AlarmReceiver). The
+ * activity merely renders the alarm, forwards the ringtoneUri extra to
+ * the service and hides the SYSTEM_ALERT_WINDOW overlay when it takes
+ * over the display.
  */
 class AlarmActivity : Activity() {
 
@@ -32,9 +33,7 @@ class AlarmActivity : Activity() {
         private const val ESCALATION_THRESHOLD = 3
     }
 
-    private var ringtoneManager: AlarmRingtoneManager? = null
     private var instanceId: String? = null
-    private var basePlaying = false
     private var confirmed = false
     private val holdHandler = Handler(Looper.getMainLooper())
     private var holdProgressRunnable: Runnable? = null
@@ -53,34 +52,29 @@ class AlarmActivity : Activity() {
 
         instance = this
 
+        // The activity is now visible — the FGS overlay must not double the display.
+        AlarmForegroundService.hideOverlay(this)
+
         applyIntentExtras(intent)
 
         val instanceId = intent.getStringExtra("instanceId")
         val silent = resolveSilent(intent)
 
-        // Start the foreground service to keep the alarm alive
+        // Start the foreground service to keep the alarm alive. The FGS owns
+        // the audio: it plays the configured ringtone (custom overrides the
+        // default — exactly ONE sound) and holds exclusive audio focus while
+        // the alarm is unacknowledged. Silent deliveries stay quiet.
         AlarmForegroundService.start(
             this,
             intent.getStringExtra("label") ?: "Alarm",
             instanceId,
             silent,
             intent.getIntExtra("repeatCount", 0),
+            intent.getStringExtra("ringtoneUri"),
         )
 
-        // Start ringtone + vibration — skipped entirely in silent mode
-        // (overlay + FGS + KEEP_SCREEN_ON stay active).
-        // If a ringtoneUri extra is present it is the escalation ringtone and
-        // is played ADDITIVELY to the default alarm sound (second MediaPlayer
-        // inside AlarmRingtoneManager, released in onDestroy via stop()).
-        ringtoneManager = AlarmRingtoneManager(this)
-        if (!silent) {
-            val ringtoneUriString = intent.getStringExtra("ringtoneUri")
-            val escalationUri = ringtoneUriString?.let { Uri.parse(it) }
-            ringtoneManager?.start(ringtoneUri = null, escalationUri = escalationUri)
-            basePlaying = true
-        }
-
         setupHoldConfirmButton()
+        setupExtendButton()
     }
 
     /**
@@ -106,8 +100,8 @@ class AlarmActivity : Activity() {
 
     /**
      * Hold-to-confirm button: holding ~2 seconds confirms the alarm —
-     * stops the ringtone, stops the foreground service, emits
-     * `alarmConfirmed` to the web layer and finishes the activity.
+     * stops the foreground service (which stops ringtone + audio focus),
+     * emits `alarmConfirmed` to the web layer and finishes the activity.
      * The AlarmManager repeat chain is deliberately NOT cancelled: the next
      * repeat link must survive if the web layer fails to process the event.
      */
@@ -151,15 +145,32 @@ class AlarmActivity : Activity() {
         }
     }
 
-    /** Stops everything, notifies the web layer and closes the overlay. */
+    /**
+     * "VERLÄNGERN" button: notifies the web layer of the extend request,
+     * stores it for consumption by the web app (in case the event arrives
+     * before the listener is registered), then returns to the main app.
+     */
+    private fun setupExtendButton() {
+        findViewById<TextView>(R.id.btn_extend).setOnClickListener {
+            val id = instanceId ?: return@setOnClickListener
+            BlockerPlugin.emitAlarmExtendRequested(id)
+            BlockerPlugin.setPendingExtendRequest(this, id)
+            startActivity(
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            finish()
+        }
+    }
+
+    /** Stops everything, notifies the web layer and closes the screen. */
     private fun confirmAlarm() {
         // One-shot guard: prevents a double alarmConfirmed emission during
         // the finish() teardown window (e.g. confirmRunnable firing again).
         if (confirmed) return
         confirmed = true
-        if (ringtoneManager?.isCurrentlyPlaying() == true) {
-            ringtoneManager?.stop()
-        }
+        // Stopping the FGS also stops ringtone + vibration and releases
+        // audio focus, so other apps' playback resumes.
         AlarmForegroundService.stop(this)
         instanceId?.let { BlockerPlugin.emitAlarmConfirmed(it) }
         finish()
@@ -169,31 +180,15 @@ class AlarmActivity : Activity() {
      * The activity is singleInstance, so repeat alarm intents (every 60s,
      * with updated repeatCount and from repeat ≥3 a ringtoneUri extra) are
      * delivered HERE instead of onCreate() while the screen is alive.
-     * Update the displayed label/repeat counter; once the escalation
-     * threshold flips a silent delivery to a FULL alarm, start the base
-     * ringtone here (onCreate skipped it); otherwise start the additive
-     * escalation playback when an escalation ringtone URI arrives.
+     * Only the displayed label/repeat counter is updated — the audio switch
+     * happens in AlarmForegroundService.onStartCommand, which AlarmReceiver
+     * restarts with the same extras for every repeat delivery.
      */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         applyIntentExtras(intent)
-
-        val silent = resolveSilent(intent)
-        val escalationUri = intent.getStringExtra("ringtoneUri")?.let { Uri.parse(it) }
-
-        if (!silent && !basePlaying) {
-            // Escalated silent delivery (repeat >= threshold): the base alarm
-            // sound was skipped in onCreate — start the full alarm now, with
-            // the escalation tone additively if configured.
-            ringtoneManager?.start(ringtoneUri = null, escalationUri = escalationUri)
-            basePlaying = true
-        } else {
-            // Silent → still silent (or base already playing): additive
-            // escalation path. Guarded inside startEscalation(): no
-            // double-start if the same escalation URI is already playing.
-            escalationUri?.let { ringtoneManager?.startEscalation(it) }
-        }
+        AlarmForegroundService.hideOverlay(this)
     }
 
     /** Updates the label + repeat counter views from the given intent's extras. */
@@ -209,9 +204,6 @@ class AlarmActivity : Activity() {
 
     override fun onDestroy() {
         holdHandler.removeCallbacksAndMessages(null)
-        ringtoneManager?.stop()
-        ringtoneManager = null
-        basePlaying = false
         super.onDestroy()
         if (instance === this) {
             instance = null

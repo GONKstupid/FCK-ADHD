@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { App } from '@capacitor/app';
 import { handleScanResult } from '../../services/alarmController';
 import { isNative } from '../../services/blockerBridge';
 import {
   startScan,
   stopScan,
+  cancelScan,
   resetDebounce,
   requestCameraPermission,
 } from '../../services/scannerService';
@@ -20,12 +22,42 @@ export default function ScannerScreen({ onBack }: Props) {
   const [message, setMessage] = useState('');
   const [permissionGranted, setPermissionGranted] = useState(false);
 
+  // Always-fresh status for the hardware back-button listener.
+  const statusRef = useRef<ScanStatus>(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
   useEffect(() => {
     void requestCameraPermission().then(setPermissionGranted);
     return () => {
       stopScan();
       resetDebounce();
       document.body.classList.remove('barcode-scanner-active');
+    };
+  }, []);
+
+  // ── Hardware back button (Android): cancel scan or leave the screen ──
+  useEffect(() => {
+    if (!isNative()) return;
+
+    const handlePromise = App.addListener('backButton', () => {
+      if (statusRef.current === 'scanning') {
+        cancelScan();
+      } else {
+        onBack();
+      }
+    });
+
+    return () => {
+      void handlePromise.then((handle) => handle.remove());
+    };
+  }, [onBack]);
+
+  // Safety: stop any in-flight scan when leaving the screen.
+  useEffect(() => {
+    return () => {
+      cancelScan();
     };
   }, []);
 
@@ -125,6 +157,17 @@ export default function ScannerScreen({ onBack }: Props) {
           </span>
         </button>
       </main>
+
+      {/* ── Floating cancel control (visible while the camera is live) ── */}
+      {status === 'scanning' && (
+        <button
+          className="scanner-cancel"
+          onClick={() => cancelScan()}
+          type="button"
+        >
+          ✕ Abbrechen
+        </button>
+      )}
     </div>
   );
 }

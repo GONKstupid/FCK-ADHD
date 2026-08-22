@@ -4,6 +4,7 @@ import {
   createInstance,
   getActiveInstance,
   getInstance,
+  getLatestCompletedInstance,
   getRoutineById,
   getRoutineByQrCodeId,
   updateInstance,
@@ -18,7 +19,7 @@ import {
   scheduleExactAlarm,
   showAlarm,
 } from './blockerBridge';
-import { REPEAT_INTERVAL_MS } from '../core/constants';
+import { REPEAT_INTERVAL_MS, SCAN_RESTART_COOLDOWN_MS } from '../core/constants';
 
 // ─── Alarm Controller ─────────────────────────────────────────────────────────
 //
@@ -45,10 +46,12 @@ export interface ScanResult {
 
 /**
  * Consolidates all QR-scan logic:
- * - REMINDING/WAITING → end the WHOLE routine: SCAN_CONFIRM is applied
- *   repeatedly until the instance reaches IDLE (every remaining step is
- *   confirmed in one go).
- * - otherwise → create a fresh instance + SCAN_START
+ * - REMINDING/WAITING → end the WHOLE routine: SCAN_CONFIRM (viaScan)
+ *   is applied repeatedly until the instance reaches IDLE (every
+ *   remaining step is confirmed in one go). Only a real scan may
+ *   complete the last step — hence viaScan: true.
+ * - otherwise → create a fresh instance + SCAN_START, unless the
+ *   routine was completed within the restart cooldown window.
  *
  * After the final state is reached the native side effects for that state
  * are applied (see applySideEffects).
@@ -70,7 +73,10 @@ export async function handleScanResult(qrCodeId: string): Promise<ScanResult> {
     let final: RoutineInstance | null = active;
     const maxEvents = routine.steps.length + 1; // hard bound against loops
     for (let i = 0; i < maxEvents && final.state !== 'IDLE'; i += 1) {
-      const next = await applyEvent(final.id, { type: 'SCAN_CONFIRM' });
+      const next = await applyEvent(final.id, {
+        type: 'SCAN_CONFIRM',
+        viaScan: true,
+      });
       if (!next) {
         return {
           status: 'unknown',
@@ -94,7 +100,20 @@ export async function handleScanResult(qrCodeId: string): Promise<ScanResult> {
     };
   }
 
-  // No active instance — start a new one
+  // No active instance — start a new one.
+  // Restart cooldown: a scan right after completion (camera double-scan)
+  // must not immediately start a fresh routine.
+  const latestCompleted = await getLatestCompletedInstance(routine.id);
+  if (
+    latestCompleted?.completedAt != null &&
+    Date.now() - latestCompleted.completedAt < SCAN_RESTART_COOLDOWN_MS
+  ) {
+    return {
+      status: 'completed',
+      message: 'Routine wurde gerade erst beendet – Neustart blockiert.',
+    };
+  }
+
   const instanceId = await createInstance(routine.id);
   const updated = await applyEvent(instanceId, { type: 'SCAN_START' });
   if (!updated) {
@@ -112,8 +131,11 @@ export async function handleScanResult(qrCodeId: string): Promise<ScanResult> {
 /**
  * Confirms the CURRENT step only (the "Erledigt" slider on the alarm
  * screen / native alarmConfirmed event): applies a single SCAN_CONFIRM
- * and then performs the side effects for the resulting state — the
- * routine advances to its next step (or completes on the last one).
+ * WITHOUT viaScan and then performs the side effects for the resulting
+ * state — the routine advances to its next step. On the LAST step this
+ * is a state-machine no-op: completing the routine requires scanning
+ * the QR code again — but the confirm still silences the current ring
+ * (the 60s repeat chain keeps the alarm coming back until then).
  *
  * Stale-overlay guard: the event is only applied while the instance is
  * REMINDING. A native alarmConfirmed can arrive after the web side has
@@ -138,8 +160,22 @@ export async function handleConfirmDone(
   // advanced must not apply another SCAN_CONFIRM.
   if (instance.state !== 'REMINDING') return instance;
 
+  // Plain SCAN_CONFIRM (no viaScan): advances any step except the last —
+  // on the last step the state machine turns this into a no-op, because
+  // ending the routine requires a QR scan.
   const updated = await applyEvent(instanceId, { type: 'SCAN_CONFIRM' });
   if (!updated) return null;
+
+  // No-op on the last step → no state change, but "ERLEDIGT" still
+  // silences the CURRENT ring; the 60s repeat chain keeps the alarm
+  // coming back until the user scans the QR code.
+  const unchanged =
+    updated.state === instance.state &&
+    updated.currentStepIndex === instance.currentStepIndex;
+  if (unchanged) {
+    await dismissCurrentRing();
+    return updated;
+  }
 
   await applySideEffects(updated, routine);
   return updated;

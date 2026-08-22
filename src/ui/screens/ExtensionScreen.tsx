@@ -1,5 +1,4 @@
-import { useCallback, useState } from 'react';
-import MathPuzzle from '../components/MathPuzzle';
+import { useCallback, useEffect, useState } from 'react';
 import HoldButton from '../components/HoldButton';
 import { handleExtend } from '../../services/alarmController';
 import {
@@ -7,9 +6,10 @@ import {
   EXTENSION_MAX_MINUTES,
 } from '../../core/constants';
 
-// ─── Extension screen: multi-step flow before granting snooze ───────────────────
+// ─── Extension screen: 3-step flow before granting snooze ──────────────────────
+// Dauer wählen → 2s halten (Verlängern) → Ergebnis mit 2s halten bestätigen.
 
-type Step = 'puzzle' | 'hold' | 'duration';
+type Step = 'duration' | 'hold' | 'confirm';
 
 // Spans the full allowed range (EXTENSION_MIN_MINUTES … EXTENSION_MAX_MINUTES)
 const DURATION_OPTIONS = [
@@ -36,34 +36,42 @@ export default function ExtensionScreen({
   onDone,
   onCancel,
 }: Props) {
-  const [step, setStep] = useState<Step>('puzzle');
+  const [step, setStep] = useState<Step>('duration');
   const [duration, setDuration] = useState(10);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [newDeadline, setNewDeadline] = useState('');
 
-  const stepIndex = step === 'puzzle' ? 1 : step === 'hold' ? 2 : 3;
+  const stepIndex = step === 'duration' ? 1 : step === 'hold' ? 2 : 3;
 
-  const handlePuzzleSolved = useCallback(() => {
-    setStep('hold');
-  }, []);
+  // ── Step 2: apply the extension once the hold completed ─────────────────────
+  useEffect(() => {
+    if (step !== 'hold') return;
+    let mounted = true;
+    void (async () => {
+      const updated = await handleExtend(instanceId, duration);
+      if (!mounted) return;
+      if (updated && updated.state === 'WAITING' && updated.deadline != null) {
+        const d = new Date(updated.deadline);
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        setNewDeadline(`${hh}:${mm}`);
+        setStep('confirm');
+      } else {
+        setError(
+          'Verlängern nicht möglich – Limit erreicht oder Alarm nicht mehr aktiv.',
+        );
+        setStep('duration');
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [step, instanceId, duration]);
 
   const handleHoldComplete = useCallback(() => {
-    setStep('duration');
-  }, []);
-
-  const handleConfirm = useCallback(async () => {
-    setBusy(true);
     setError('');
-    const updated = await handleExtend(instanceId, duration);
-    setBusy(false);
-    if (updated && updated.state === 'WAITING') {
-      onDone();
-    } else {
-      setError(
-        'Verlängern nicht möglich – Limit erreicht oder Alarm nicht mehr aktiv.',
-      );
-    }
-  }, [instanceId, duration, onDone]);
+    setStep('hold');
+  }, []);
 
   return (
     <div className="extension-screen">
@@ -90,24 +98,6 @@ export default function ExtensionScreen({
 
       {/* ── Step content ── */}
       <main className="extension-screen__main">
-        {step === 'puzzle' && (
-          <>
-            <p className="extension-screen__hint">
-              Löse die Aufgabe, um zu beweisen dass du wach bist.
-            </p>
-            <MathPuzzle onSolved={handlePuzzleSolved} />
-          </>
-        )}
-
-        {step === 'hold' && (
-          <>
-            <p className="extension-screen__hint">
-              Halte den Button gedrückt für 4 Sekunden.
-            </p>
-            <HoldButton holdDuration={4000} onComplete={handleHoldComplete} />
-          </>
-        )}
-
         {step === 'duration' && (
           <>
             <p className="extension-screen__hint">
@@ -139,18 +129,45 @@ export default function ExtensionScreen({
               <div className="extension-screen__value">{duration} Minuten</div>
             </div>
 
-            <button
-              className="btn btn--scan extension-screen__confirm"
-              onClick={() => void handleConfirm()}
-              disabled={busy}
-            >
-              {busy ? 'Wird verlängert…' : `Verlängern für ${duration} Min`}
-            </button>
+            {/* Weiter geht es nur über das 2s-Halten. */}
+            <HoldButton
+              holdDuration={2000}
+              onComplete={handleHoldComplete}
+              label="HALTEN ZUM VERLÄNGERN (2 s)"
+            />
             {error && (
               <p className="scan-feedback scan-feedback--error extension-screen__error">
                 {error}
               </p>
             )}
+          </>
+        )}
+
+        {step === 'hold' && (
+          <>
+            <p className="extension-screen__hint">
+              Verlängern um {duration} Minuten…
+            </p>
+            <div className="empty-state">
+              <div className="spinner" />
+            </div>
+          </>
+        )}
+
+        {step === 'confirm' && (
+          <>
+            <p className="extension-screen__hint">
+              Verlängert bis {newDeadline}
+            </p>
+            <p className="extension-screen__hint">
+              Der Alarm meldet sich dann wieder – bestätige, dass du es
+              mitbekommen hast.
+            </p>
+            <HoldButton
+              holdDuration={2000}
+              onComplete={onDone}
+              label="BESTÄTIGEN (2 s)"
+            />
           </>
         )}
       </main>

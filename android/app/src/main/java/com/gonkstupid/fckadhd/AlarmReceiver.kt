@@ -59,7 +59,10 @@ class AlarmReceiver : BroadcastReceiver() {
         val silent = scheduler.getSilent(instanceId) && repeatCount < ESCALATION_THRESHOLD
 
         // 4. Start the foreground service first (keeps process alive).
-        AlarmForegroundService.start(context, label, instanceId, silent, repeatCount)
+        //    The FGS owns the alarm audio: it plays the configured ringtone
+        //    (custom overrides default) and holds exclusive audio focus so
+        //    other apps' playback pauses until the alarm is acknowledged.
+        AlarmForegroundService.start(context, label, instanceId, silent, repeatCount, ringtoneUri)
 
         // Launch the full-screen alarm activity.
         val alarmIntent = Intent(context, AlarmActivity::class.java).apply {

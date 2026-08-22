@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { dismissCurrentRing, handleConfirmDone } from '../../services/alarmController';
+import { getInstance, getRoutineById } from '../../services/routineService';
 import { MAX_EXTENSIONS } from '../../core/constants';
 import HoldButton from '../components/HoldButton';
 
@@ -31,11 +32,31 @@ export default function AlarmScreen({
 }: Props) {
   const [pulse, setPulse] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // On the LAST step "Erledigt" no longer completes the routine — ending
+  // it requires scanning the QR code again.
+  const [isLastStep, setIsLastStep] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => setPulse((p) => !p), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Re-check whenever the screen re-renders from props changes (new
+  // instance, alarm repeats) so the QR hint appears exactly on the last step.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const instance = await getInstance(instanceId);
+      const routine = instance
+        ? await getRoutineById(instance.routineId)
+        : undefined;
+      if (cancelled || !instance || !routine) return;
+      setIsLastStep(instance.currentStepIndex >= routine.steps.length - 1);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [instanceId, repeatCount]);
 
   async function handleLater() {
     // No navigation, no state change — native chain rings again in 60s.
@@ -78,9 +99,22 @@ export default function AlarmScreen({
 
         <div className="alarm-screen__divider" />
 
-        <p className="alarm-screen__instruction">
-          Halte ERLEDIGT zum Bestätigen
-        </p>
+        {isLastStep ? (
+          <>
+            {/* Letzter Schritt: Abschließen geht nur per QR-Scan */}
+            <p className="alarm-screen__instruction">
+              Zum Abschließen QR-Code scannen
+            </p>
+            <p className="alarm-screen__snooze-hint">
+              Halte ERLEDIGT, um nur den aktuellen Alarm zu stoppen – die
+              Routine endet erst per QR-Scan.
+            </p>
+          </>
+        ) : (
+          <p className="alarm-screen__instruction">
+            Halte ERLEDIGT zum Bestätigen
+          </p>
+        )}
 
         {/* ── Erledigt: bestätigt den aktuellen Schritt ── */}
         <div className="alarm-screen__confirm">
