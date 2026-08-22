@@ -1,0 +1,30 @@
+<svg viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Hintergrund -->
+  <rect x="0" y="0" width="600" height="600" fill="#000000"/>
+
+  <!-- oberer roter Balken -->
+  <rect x="45" y="50" width="510" height="38" fill="#e2231a"/>
+
+  <!-- Schriftzug FCK -->
+  <text x="45" y="285"
+        font-family="Liberation Sans, Arial, sans-serif"
+        font-weight="700"
+        font-size="245"
+        letter-spacing="-6"
+        textLength="510"
+        lengthAdjust="spacingAndGlyphs"
+        fill="#ffffff">FCK</text>
+
+  <!-- Schriftzug ADHD -->
+  <text x="45" y="480"
+        font-family="Liberation Sans, Arial, sans-serif"
+        font-weight="700"
+        font-size="195"
+        letter-spacing="-6"
+        textLength="510"
+        lengthAdjust="spacingAndGlyphs"
+        fill="#ffffff">ADHD</text>
+
+  <!-- unterer roter Balken -->
+  <rect x="45" y="512" width="510" height="38" fill="#e2231a"/>
+</svg>
