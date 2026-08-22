@@ -1,6 +1,7 @@
 package com.gonkstupid.fckadhd
 
 import android.app.Activity
+import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
 import android.widget.TextView
@@ -8,12 +9,15 @@ import android.widget.TextView
 /**
  * Full-screen alarm activity that shows over the lock screen.
  * Displays the routine label and repeat count with a dark background.
+ * Triggers ringtone and vibration via AlarmRingtoneManager.
  */
 class AlarmActivity : Activity() {
 
     companion object {
         var instance: AlarmActivity? = null
     }
+
+    private var ringtoneManager: AlarmRingtoneManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,15 +42,24 @@ class AlarmActivity : Activity() {
 
         // Start the foreground service to keep the alarm alive
         AlarmForegroundService.start(this, label)
+
+        // Start ringtone + vibration
+        ringtoneManager = AlarmRingtoneManager(this)
+        val ringtoneUriString = intent.getStringExtra("ringtoneUri")
+        val ringtoneUri = ringtoneUriString?.let { Uri.parse(it) }
+        ringtoneManager?.start(ringtoneUri)
     }
 
     override fun onDestroy() {
+        ringtoneManager?.stop()
+        ringtoneManager = null
         super.onDestroy()
         if (instance === this) {
             instance = null
         }
     }
 
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         // Prevent dismissing the alarm via back button
     }
