@@ -10,6 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
+    "check:native": "cd android && gradlew.bat compileDebugKotlin",
+    "verify": "tsc -p tsconfig.app.json --noEmit && eslint . && vitest run",
     "dist:android": "npm run build && cap sync android && cd android && gradlew.bat assembleRelease"
   },
   "dependencies": {

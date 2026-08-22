@@ -1,0 +1,6 @@
+{
+  "gradle.javaHome": "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.12.101-hotspot",
+  "kotlin.java.home": "C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.12.101-hotspot",
+  "java.configuration.updateBuildConfiguration": "interactive",
+  "kotlin.languageServer.enabled": false
+}

@@ -116,7 +116,8 @@ export default function SettingsScreen({ onBack }: Props) {
     return granted ? (
       <span className="badge badge--idle">OK</span>
     ) : (
-      <span className="badge badge--reminding">Fehlt</span>
+      // Amber statt Rot: Rot ist aktiven Alarmen vorbehalten (Spec §9).
+      <span className="badge badge--missing">Fehlt</span>
     );
   }
 

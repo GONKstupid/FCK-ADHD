@@ -98,8 +98,11 @@ src/
 - [x] Phase 3: Native blocking plugin
 - [x] Phase 4: Background reliability
 - [x] Phase 5: Extension & escalation
-- [ ] Phase 6: Hardening & testing
-- [ ] Phase 7: Polish & release
+- [x] Phase 6: Hardening & testing
+- [x] Phase 7: Polish & release
+
+> **Note:** Automated hardening (93 unit tests) and the signed release APK are complete.
+> The final manual step is executing the device hardening checklist [`docs/haertungstest-checkliste.md`](docs/haertungstest-checkliste.md) (S1–S14) on real devices (≥1× Android 12+, ≥1× Android 14+).
 
 ## License
 [MIT License](./LICENSE) – see [LICENSE](./LICENSE) file.

@@ -56,6 +56,27 @@ cd ..
 - [ ] Test-Timer auf kurze Verzögerung stellen (falls konfigurierbar), sonst reale Wartezeiten einplanen.
 - [ ] `adb`-Verbindung steht: `adb devices` zeigt das Gerät.
 
+### 2.3 Ausführungshinweis (Schnelldurchlauf)
+
+**Build & Installation** (Details siehe §2.1) – Gradle benötigt **JDK 21** (`JAVA_HOME` muss auf ein JDK 21 zeigen):
+
+```powershell
+$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot'
+npm run build; npx cap sync android; cd android; .\gradlew.bat installDebug; cd ..
+```
+
+**Empfohlene Reihenfolge:** S1–S14 fortlaufend, mit dieser Gruppierung:
+
+1. **Scan-Basics:** S1, S2 (schnell, ohne Wartezeiten).
+2. **Alarm-Kern:** S3, S4, S5, S6 (bauen aufeinander auf).
+3. **Robustheit:** S7, S8, S9, S11 (App-Kill, Neustarts, Doze).
+4. **Umgebung:** S12 (Lautlos/DND), S14 (Lockscreen).
+5. **Sonderfälle zuletzt:** S10 (Akku leer – zeitaufwendig), S13 (Berechtigungen entziehen; danach wieder erteilen).
+
+**Benötigte Geräte:** mindestens 1× Android 12+ (API 31+) und 1× Android 14+ (API 34+) – Eintrag in der Device-Matrix (§3) nicht vergessen.
+
+**Bestehens-Kriterien:** Alle Szenarien auf beiden Geräten „OK“ → siehe **§5 (Bestehens-Kriterium)**.
+
 ---
 
 ## 3. Device-Matrix

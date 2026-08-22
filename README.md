@@ -56,6 +56,10 @@ npx cap open android
 | `npx cap sync` | Web-Assets → Android kopieren |
 | `npx cap open android` | Android Studio öffnen |
 | `npm run dist:android` | Signierte Release-APK bauen (Sideload) |
+| `npm run check:native` | Kotlin/Native-Code per Gradle kompilieren (`compileDebugKotlin`) |
+| `npm run verify` | Vollständige Web-Prüfung: TypeScript + ESLint + Vitest |
+
+> ⚠️ **Hinweis:** Die Gesundheit des Kotlin/Native-Codes wird **ausschließlich** über `npm run check:native` (Gradle) geprüft – **nicht** über Editor-Diagnosen. Der Kotlin Language Server zeigt Phantom-Fehler an, weil er den AGP/Android-Classpath nicht auflösen kann; die Quellen kompilieren sauber über Gradle. `npm run verify` führt die vollständige Prüfung der Web-Seite aus (TypeScript + ESLint + Vitest).
 
 ## Release-APK bauen & installieren (Sideload)
 
@@ -175,8 +179,11 @@ src/
 - [x] Phase 3: Native Blocking Plugin
 - [x] Phase 4: Background Reliability
 - [x] Phase 5: Extension & Escalation
-- [ ] Phase 6: Hardening & Testing
-- [ ] Phase 7: Polish & Release
+- [x] Phase 6: Hardening & Testing
+- [x] Phase 7: Polish & Release
+
+> **Hinweis:** Automatisiertes Hardening (93 Unit-Tests) und die signierte Release-APK sind abgeschlossen.
+> Der letzte manuelle Schritt ist die Ausführung der Geräte-Härtungs-Checkliste [`docs/haertungstest-checkliste.md`](docs/haertungstest-checkliste.md) (S1–S14) auf echten Geräten (≥1× Android 12+, ≥1× Android 14+).
 
 ## Lizenz
 [MIT License](./LICENSE) – siehe [LICENSE](./LICENSE) Datei.
