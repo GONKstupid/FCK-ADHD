@@ -39,6 +39,8 @@ interface BlockerPluginInterface {
   // ── Permissions & settings ──
   hasExactAlarmPermission(): Promise<{ granted: boolean }>;
   canUseFullScreenIntent(): Promise<{ granted: boolean }>;
+  checkNotificationPermission(): Promise<{ granted: boolean }>;
+  requestNotificationPermission(): Promise<{ granted: boolean }>;
   openExactAlarmSettings(): Promise<void>;
   openFullScreenIntentSettings(): Promise<void>;
 
@@ -184,6 +186,30 @@ export async function hasExactAlarmPermission(): Promise<{
 export async function canUseFullScreenIntent(): Promise<{ granted: boolean }> {
   if (!isNative()) return { granted: true };
   return BlockerNative.canUseFullScreenIntent();
+}
+
+/**
+ * Whether the POST_NOTIFICATIONS runtime permission is granted
+ * (required for the alarm foreground notification on Android 13+).
+ * On web, treated as granted.
+ */
+export async function checkNotificationPermission(): Promise<{
+  granted: boolean;
+}> {
+  if (!isNative()) return { granted: true };
+  return BlockerNative.checkNotificationPermission();
+}
+
+/**
+ * Requests the POST_NOTIFICATIONS runtime permission (Android 13+).
+ * Without it the alarm foreground notification is silently suppressed.
+ * On web, treated as granted.
+ */
+export async function requestNotificationPermission(): Promise<{
+  granted: boolean;
+}> {
+  if (!isNative()) return { granted: true };
+  return BlockerNative.requestNotificationPermission();
 }
 
 /**

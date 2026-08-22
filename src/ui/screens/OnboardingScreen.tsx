@@ -4,6 +4,8 @@ import {
   isNative,
   hasExactAlarmPermission,
   canUseFullScreenIntent,
+  checkNotificationPermission,
+  requestNotificationPermission,
   openExactAlarmSettings,
   openFullScreenIntentSettings,
   requestBatteryOptimizationExemption,
@@ -20,9 +22,10 @@ const TOTAL_STEPS = 6;
 
 /**
  * Schritte, deren Überspringen eine Warnung auslöst
- * (exakte Alarme, Vollbild-Benachrichtigungen, Akku-Optimierung).
+ * (Benachrichtigungen, exakte Alarme, Vollbild-Benachrichtigungen,
+ * Akku-Optimierung).
  */
-const WARN_ON_SKIP = new Set([2, 3, 4]);
+const WARN_ON_SKIP = new Set([1, 2, 3, 4]);
 
 const SKIP_WARNING =
   'Ohne diese Berechtigung ist die Zuverlässigkeit der Alarme nicht garantiert.';
@@ -58,6 +61,9 @@ export default function OnboardingScreen({ onComplete }: Props) {
   const [fullScreenGranted, setFullScreenGranted] = useState<boolean | null>(
     null,
   );
+  const [notificationGranted, setNotificationGranted] = useState<
+    boolean | null
+  >(null);
 
   const showNativeSteps = isNative();
 
@@ -65,12 +71,14 @@ export default function OnboardingScreen({ onComplete }: Props) {
   const refreshPermissions = useCallback(async () => {
     if (!isNative()) return;
     try {
-      const [exact, fsi] = await Promise.all([
+      const [exact, fsi, notif] = await Promise.all([
         hasExactAlarmPermission(),
         canUseFullScreenIntent(),
+        checkNotificationPermission(),
       ]);
       setExactAlarmGranted(exact.granted);
       setFullScreenGranted(fsi.granted);
+      setNotificationGranted(notif.granted);
     } catch (err) {
       console.error('[OnboardingScreen] permission check failed:', err);
     }
@@ -112,6 +120,15 @@ export default function OnboardingScreen({ onComplete }: Props) {
   }
 
   // ── Permission actions ─────────────────────────────────────────────────────
+  async function handleNotificationPermission() {
+    try {
+      const result = await requestNotificationPermission();
+      setNotificationGranted(result.granted);
+    } catch (err) {
+      console.error('[OnboardingScreen] notification permission failed:', err);
+    }
+  }
+
   async function handleExactAlarm() {
     await openExactAlarmSettings();
     await refreshPermissions();
@@ -205,10 +222,13 @@ export default function OnboardingScreen({ onComplete }: Props) {
             <div className="onboarding__card">
               <div className="onboarding__icon">📣</div>
               <h2 className="onboarding__heading">Benachrichtigungen</h2>
+              {showNativeSteps && (
+                <StatusChip granted={notificationGranted} />
+              )}
               <p className="onboarding__text">
                 Benachrichtigungen werden für die Alarm-Anzeige benötigt. Auf
-                Android 13 oder neuer fragt das System die Berechtigung
-                automatisch an, sobald sie gebraucht wird.
+                Android 13 oder neuer muss diese Berechtigung einmalig erteilt
+                werden — ohne sie bleibt der Alarm stumm.
               </p>
               {!showNativeSteps && (
                 <p className="onboarding__text">
@@ -218,18 +238,37 @@ export default function OnboardingScreen({ onComplete }: Props) {
               )}
             </div>
 
+            {showNativeSteps && notificationGranted === false && (
+              <button
+                className="btn btn--scan onboarding__btn"
+                onClick={() => void handleNotificationPermission()}
+              >
+                Berechtigung erteilen
+              </button>
+            )}
+
             <button
-              className="btn btn--scan onboarding__btn"
+              className={`btn ${
+                showNativeSteps && notificationGranted === false
+                  ? 'btn--secondary'
+                  : 'btn--scan'
+              } onboarding__btn`}
               onClick={() => goTo(2)}
             >
               Weiter
             </button>
 
+            {skipWarned && (
+              <p className="onboarding__warning" role="alert">
+                {SKIP_WARNING}
+              </p>
+            )}
+
             <button
               className="btn btn--ghost onboarding__skip"
               onClick={handleSkip}
             >
-              Überspringen
+              {skipWarned ? 'Trotzdem überspringen' : 'Überspringen'}
             </button>
           </>
         )}

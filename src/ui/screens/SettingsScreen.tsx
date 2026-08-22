@@ -6,6 +6,8 @@ import {
   setEscalationRingtone,
   hasExactAlarmPermission,
   canUseFullScreenIntent,
+  checkNotificationPermission,
+  requestNotificationPermission,
   openExactAlarmSettings,
   openFullScreenIntentSettings,
 } from '../../services/blockerBridge';
@@ -19,7 +21,7 @@ interface Props {
 /**
  * Settings screen (German).
  * (a) Escalation ringtone selection (native only).
- * (b) Permission status: exact alarms + full-screen intents,
+ * (b) Permission status: notifications + exact alarms + full-screen intents,
  *     with shortcuts into the system settings.
  */
 export default function SettingsScreen({ onBack }: Props) {
@@ -35,22 +37,27 @@ export default function SettingsScreen({ onBack }: Props) {
   const [fullScreenGranted, setFullScreenGranted] = useState<boolean | null>(
     null,
   );
+  const [notificationGranted, setNotificationGranted] = useState<
+    boolean | null
+  >(null);
 
   useEffect(() => {
     let mounted = true;
     void (async () => {
       try {
-        const [tones, current, exact, fsi] = await Promise.all([
+        const [tones, current, exact, fsi, notif] = await Promise.all([
           listRingtones(),
           getEscalationRingtone(),
           hasExactAlarmPermission(),
           canUseFullScreenIntent(),
+          checkNotificationPermission(),
         ]);
         if (!mounted) return;
         setRingtones(tones.ringtones);
         setCurrentUri(current.uri);
         setExactAlarmGranted(exact.granted);
         setFullScreenGranted(fsi.granted);
+        setNotificationGranted(notif.granted);
       } catch (err) {
         console.error('[SettingsScreen] failed to load settings:', err);
       } finally {
@@ -63,12 +70,14 @@ export default function SettingsScreen({ onBack }: Props) {
   }, []);
 
   const refreshPermissions = useCallback(async () => {
-    const [exact, fsi] = await Promise.all([
+    const [exact, fsi, notif] = await Promise.all([
       hasExactAlarmPermission(),
       canUseFullScreenIntent(),
+      checkNotificationPermission(),
     ]);
     setExactAlarmGranted(exact.granted);
     setFullScreenGranted(fsi.granted);
+    setNotificationGranted(notif.granted);
   }, []);
 
   // Re-check when the user returns from the system settings screen.
@@ -91,6 +100,15 @@ export default function SettingsScreen({ onBack }: Props) {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleNotificationPermission() {
+    try {
+      await requestNotificationPermission();
+    } catch (err) {
+      console.error('[SettingsScreen] notification permission failed:', err);
+    }
+    await refreshPermissions();
   }
 
   function permissionBadge(granted: boolean | null) {
@@ -162,6 +180,21 @@ export default function SettingsScreen({ onBack }: Props) {
             {/* ── (b) Berechtigungs-Status ── */}
             <section className="settings-section">
               <h2 className="settings-section__title">Berechtigungen</h2>
+
+              <div className="settings-row">
+                <div className="settings-row__info">
+                  <span className="settings-row__label">Benachrichtigungen</span>
+                  {permissionBadge(native ? notificationGranted : true)}
+                </div>
+                {native && notificationGranted === false && (
+                  <button
+                    className="btn btn--secondary settings-row__action"
+                    onClick={() => void handleNotificationPermission()}
+                  >
+                    Berechtigung anfragen
+                  </button>
+                )}
+              </div>
 
               <div className="settings-row">
                 <div className="settings-row__info">

@@ -1,5 +1,6 @@
 package com.gonkstupid.fckadhd.plugins
 
+import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationManager
 import android.content.Context
@@ -10,12 +11,16 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
+import com.getcapacitor.PermissionState
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.getcapacitor.annotation.Permission
+import com.getcapacitor.annotation.PermissionCallback
 import org.json.JSONObject
 import com.gonkstupid.fckadhd.AlarmActivity
 import com.gonkstupid.fckadhd.AlarmForegroundService
@@ -23,7 +28,15 @@ import com.gonkstupid.fckadhd.AlarmScheduler
 import com.gonkstupid.fckadhd.AudioController
 import java.lang.ref.WeakReference
 
-@CapacitorPlugin(name = "BlockerPlugin")
+@CapacitorPlugin(
+    name = "BlockerPlugin",
+    permissions = [
+        Permission(
+            strings = [Manifest.permission.POST_NOTIFICATIONS],
+            alias = "notifications"
+        )
+    ]
+)
 class BlockerPlugin : Plugin() {
 
     companion object {
@@ -168,6 +181,59 @@ class BlockerPlugin : Plugin() {
         val scheduled = alarmScheduler.isScheduled(instanceId)
         val result = JSObject()
         result.put("scheduled", scheduled)
+        call.resolve(result)
+    }
+
+    // ── Permissions: notifications ───────────────────────────────────────────
+
+    /** Resolves { granted: boolean }. */
+    @PluginMethod
+    fun checkNotificationPermission(call: PluginCall) {
+        val granted = NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+        val result = JSObject()
+        result.put("granted", granted)
+        call.resolve(result)
+    }
+
+    /**
+     * Resolves { granted: boolean }. True on API < 33 (no permission needed).
+     * Resolves granted=false (no crash) when no activity is available.
+     */
+    @PluginMethod
+    fun requestNotificationPermission(call: PluginCall) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            val result = JSObject()
+            result.put("granted", true)
+            call.resolve(result)
+            return
+        }
+
+        if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            val result = JSObject()
+            result.put("granted", true)
+            call.resolve(result)
+            return
+        }
+
+        val activity = getActivity()
+        if (activity == null) {
+            val result = JSObject()
+            result.put("granted", false)
+            call.resolve(result)
+            return
+        }
+
+        requestPermissionForAlias("notifications", call, "notificationPermissionResult")
+    }
+
+    /** Callback invoked by Capacitor after the POST_NOTIFICATIONS dialog closes. */
+    @PermissionCallback
+    private fun notificationPermissionResult(call: PluginCall) {
+        val granted = getPermissionState("notifications") == PermissionState.GRANTED
+
+        val result = JSObject()
+        result.put("granted", granted)
         call.resolve(result)
     }
 
