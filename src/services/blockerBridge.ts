@@ -49,6 +49,11 @@ interface BlockerPluginInterface {
   setEscalationRingtone(options: { uri: string }): Promise<void>;
   getEscalationRingtone(): Promise<{ uri: string | null }>;
 
+  // ── Gallery export ──
+  saveImageToGallery(options: {
+    dataUrl: string;
+  }): Promise<{ saved: boolean; uri?: string }>;
+
   // ── Event channel (native → web) ──
   addListener(
     eventName: 'alarmFired',
@@ -259,6 +264,19 @@ export async function getEscalationRingtone(): Promise<{
 }> {
   if (!isNative()) return { uri: null };
   return BlockerNative.getEscalationRingtone();
+}
+
+// ─── Gallery export ─────────────────────────────────────────────────────────────
+
+/**
+ * Saves a PNG data URL to the device photo gallery (Pictures/FCK-ADHD).
+ * Returns { saved: false } on web.
+ */
+export async function saveImageToGallery(
+  dataUrl: string,
+): Promise<{ saved: boolean; uri?: string }> {
+  if (!isNative()) return { saved: false };
+  return BlockerNative.saveImageToGallery({ dataUrl });
 }
 
 // ─── Event channel (native → web) ─────────────────────────────────────────────

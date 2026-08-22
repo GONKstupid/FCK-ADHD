@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { getRoutineById } from '../../services/routineService';
-import { generateQRSvg } from '../../services/qrGenerator';
+import {
+  generateQRSvg,
+  generateQRDataUrlHighRes,
+} from '../../services/qrGenerator';
+import { isNative, saveImageToGallery } from '../../services/blockerBridge';
 import type { Routine } from '../../core/models';
 import GlyphStrip from '../components/GlyphStrip';
 
@@ -13,6 +17,9 @@ export default function QRExportScreen({ routineId, onBack }: Props) {
   const [routine, setRoutine] = useState<Routine | null>(null);
   const [svg, setSvg] = useState('');
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -25,6 +32,30 @@ export default function QRExportScreen({ routineId, onBack }: Props) {
       setLoading(false);
     })();
   }, [routineId]);
+
+  async function handleExport() {
+    if (!isNative()) {
+      window.print();
+      return;
+    }
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const dataUrl = await generateQRDataUrlHighRes(routine!.qrCodeId);
+      const res = await saveImageToGallery(dataUrl);
+      setFeedbackError(!res.saved);
+      setFeedback(
+        res.saved
+          ? 'QR-Code wurde in Fotos gespeichert.'
+          : 'Speichern nicht möglich.',
+      );
+    } catch {
+      setFeedbackError(true);
+      setFeedback('Speichern fehlgeschlagen.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -106,8 +137,20 @@ export default function QRExportScreen({ routineId, onBack }: Props) {
           </p>
         </div>
 
-        <button className="btn btn--secondary" onClick={() => window.print()}>
-          Drucken
+        {feedback && (
+          <div
+            className={`scan-feedback scan-feedback--${feedbackError ? 'error' : 'success'}`}
+            role="alert"
+          >
+            {feedback}
+          </div>
+        )}
+        <button
+          className="btn btn--secondary"
+          onClick={() => void handleExport()}
+          disabled={saving}
+        >
+          {isNative() ? 'In Fotos speichern' : 'Drucken'}
         </button>
       </main>
     </div>

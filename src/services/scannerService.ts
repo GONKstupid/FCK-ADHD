@@ -1,4 +1,7 @@
-import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
+import {
+  BarcodeScanner,
+  BarcodeFormat,
+} from '@capacitor-mlkit/barcode-scanning';
 import type { PluginListenerHandle } from '@capacitor/core';
 
 // ─── Debounce logic ─────────────────────────────────────────────────────────────
@@ -108,7 +111,7 @@ export async function startScan(): Promise<string> {
           void cleanup().then(() => reject(new Error('Scan failed')));
         });
 
-        await BarcodeScanner.startScan();
+        await BarcodeScanner.startScan({ formats: [BarcodeFormat.QrCode] });
       } catch {
         if (!settled) {
           settled = true;

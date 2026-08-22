@@ -115,7 +115,7 @@ export async function applyEvent(
   // The `transaction` guard keeps the plain-object db mock used in the
   // tests compatible (it has no Dexie transaction API).
   if (typeof db.transaction === 'function') {
-    return db.transaction('rw', db.instances, readTransitionWrite);
+    return db.transaction('rw', db.instances, db.routines, readTransitionWrite);
   }
   return readTransitionWrite();
 }

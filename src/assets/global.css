@@ -544,6 +544,24 @@ a {
   text-align: center;
 }
 
+/* ── Live camera preview: transparent layers while ML Kit scan is active ── */
+body.barcode-scanner-active {
+  background-color: transparent;
+}
+
+body.barcode-scanner-active .dot-grid-bg {
+  display: none;
+}
+
+body.barcode-scanner-active .viewfinder__frame {
+  background: transparent;
+  border-color: transparent;
+}
+
+body.barcode-scanner-active .viewfinder__center {
+  display: none;
+}
+
 /* ─── Scan feedback ──────────────────────────────────────────────────────────── */
 .scan-feedback {
   font-family: var(--font-mono);

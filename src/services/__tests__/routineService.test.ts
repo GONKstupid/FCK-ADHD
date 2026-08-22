@@ -81,7 +81,8 @@ const store = vi.hoisted(() => {
     instances: typeof instancesTable;
     transaction?: (
       mode: string,
-      table: unknown,
+      table1: unknown,
+      table2: unknown,
       fn: () => Promise<RoutineInstance | null>,
     ) => Promise<RoutineInstance | null>;
   };
@@ -358,7 +359,8 @@ describe('routineService – applyEvent', () => {
     store.db.transaction = vi.fn(
       (
         _mode: string,
-        _table: unknown,
+        _table1: unknown,
+        _table2: unknown,
         fn: () => Promise<RoutineInstance | null>,
       ) => fn(),
     );
@@ -368,6 +370,7 @@ describe('routineService – applyEvent', () => {
     expect(store.db.transaction).toHaveBeenCalledWith(
       'rw',
       store.db.instances,
+      store.db.routines,
       expect.any(Function),
     );
     expect(updated!.state).toBe('WAITING');

@@ -3,14 +3,19 @@ package com.gonkstupid.fckadhd.plugins
 import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.media.MediaScannerConnection
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.provider.Settings
+import android.util.Base64
 import androidx.core.app.NotificationManagerCompat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
@@ -26,6 +31,7 @@ import com.gonkstupid.fckadhd.AlarmActivity
 import com.gonkstupid.fckadhd.AlarmForegroundService
 import com.gonkstupid.fckadhd.AlarmScheduler
 import com.gonkstupid.fckadhd.AudioController
+import java.io.File
 import java.lang.ref.WeakReference
 
 @CapacitorPlugin(
@@ -34,6 +40,10 @@ import java.lang.ref.WeakReference
         Permission(
             strings = [Manifest.permission.POST_NOTIFICATIONS],
             alias = "notifications"
+        ),
+        Permission(
+            strings = [Manifest.permission.WRITE_EXTERNAL_STORAGE],
+            alias = "storage"
         )
     ]
 )
@@ -373,5 +383,139 @@ class BlockerPlugin : Plugin() {
         }
 
         call.resolve()
+    }
+
+    // ─── Gallery export ────────────────────────────────────────────────
+
+    /**
+     * Saves a PNG data URL into the public pictures directory
+     * (Pictures/FCK-ADHD) so it shows up in Google Photos & co.
+     * API 29+: MediaStore insert, no runtime permission required.
+     * API 24–28: WRITE_EXTERNAL_STORAGE via the "storage" permission alias.
+     */
+    @PluginMethod
+    fun saveImageToGallery(call: PluginCall) {
+        val dataUrl = call.getString("dataUrl")
+        if (dataUrl == null || !dataUrl.contains(',')) {
+            call.reject("dataUrl fehlt oder ist ungültig")
+            return
+        }
+        val bytes = try {
+            Base64.decode(
+                dataUrl.substringAfter(','),
+                Base64.DEFAULT
+            )
+        } catch (e: IllegalArgumentException) {
+            call.reject("Base64-Dekodierung fehlgeschlagen", e)
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            saveViaMediaStore(call, bytes)
+        } else if (getPermissionState("storage") == PermissionState.GRANTED) {
+            saveViaLegacyStorage(call, bytes)
+        } else {
+            requestPermissionForAlias("storage", call, "storagePermissionResult")
+        }
+    }
+
+    /** Callback invoked by Capacitor after the WRITE_EXTERNAL_STORAGE dialog closes. */
+    @PermissionCallback
+    private fun storagePermissionResult(call: PluginCall) {
+        val dataUrl = call.getString("dataUrl") ?: run {
+            call.reject("dataUrl fehlt oder ist ungültig")
+            return
+        }
+        val bytes = try {
+            Base64.decode(
+                dataUrl.substringAfter(','),
+                Base64.DEFAULT
+            )
+        } catch (e: IllegalArgumentException) {
+            call.reject("Base64-Dekodierung fehlgeschlagen", e)
+            return
+        }
+        if (getPermissionState("storage") == PermissionState.GRANTED) {
+            saveViaLegacyStorage(call, bytes)
+        } else {
+            call.reject("Storage-Permission verweigert")
+        }
+    }
+
+    private fun saveViaMediaStore(call: PluginCall, bytes: ByteArray) {
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(
+                MediaStore.Images.Media.DISPLAY_NAME,
+                "FCK-ADHD-QR-${System.currentTimeMillis()}.png"
+            )
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(
+                MediaStore.Images.Media.RELATIVE_PATH,
+                "${Environment.DIRECTORY_PICTURES}/FCK-ADHD"
+            )
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            values
+        ) ?: run {
+            call.reject("MediaStore-Insert fehlgeschlagen")
+            return
+        }
+
+        try {
+            val stream = resolver.openOutputStream(uri)
+            if (stream == null) {
+                resolver.delete(uri, null, null)
+                call.reject("OutputStream nicht verfügbar")
+                return
+            }
+            stream.use { it.write(bytes) }
+            values.clear()
+            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+        } catch (e: Exception) {
+            // Delete the orphaned IS_PENDING row so nothing stale
+            // lingers in MediaStore after a failed write/update.
+            resolver.delete(uri, null, null)
+            call.reject("Speichern fehlgeschlagen", e)
+            return
+        }
+
+        val result = JSObject()
+        result.put("saved", true)
+        result.put("uri", uri.toString())
+        call.resolve(result)
+    }
+
+    private fun saveViaLegacyStorage(call: PluginCall, bytes: ByteArray) {
+        try {
+            @Suppress("DEPRECATION")
+            val dir = File(
+                Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_PICTURES
+                ),
+                "FCK-ADHD"
+            )
+            if (!dir.exists() && !dir.mkdirs()) {
+                call.reject("Verzeichnis konnte nicht angelegt werden")
+                return
+            }
+            val file = File(dir, "FCK-ADHD-QR-${System.currentTimeMillis()}.png")
+            file.writeBytes(bytes)
+            MediaScannerConnection.scanFile(
+                context,
+                arrayOf(file.absolutePath),
+                null,
+                null
+            )
+            val result = JSObject()
+            result.put("saved", true)
+            result.put("uri", Uri.fromFile(file).toString())
+            call.resolve(result)
+        } catch (e: Exception) {
+            call.reject("Speichern fehlgeschlagen", e)
+        }
     }
 }

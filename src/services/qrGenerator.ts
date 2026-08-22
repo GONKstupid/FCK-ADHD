@@ -31,3 +31,22 @@ export async function generateQRDataUrl(qrCodeId: string): Promise<string> {
     },
   });
 }
+
+/**
+ * Generates a high-resolution PNG data URL (default 2048px) for the given
+ * QR code ID — suitable for saving to the photo gallery / printing.
+ */
+export async function generateQRDataUrlHighRes(
+  qrCodeId: string,
+  sizePx = 2048,
+): Promise<string> {
+  return QRCode.toDataURL(qrCodeId, {
+    errorCorrectionLevel: 'M',
+    margin: 2,
+    width: sizePx,
+    color: {
+      dark: '#1a1a1a',
+      light: '#f5f3ec',
+    },
+  });
+}

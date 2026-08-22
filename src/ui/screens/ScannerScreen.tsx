@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { handleScanResult } from '../../services/alarmController';
+import { isNative } from '../../services/blockerBridge';
 import {
   startScan,
   stopScan,
@@ -24,12 +25,19 @@ export default function ScannerScreen({ onBack }: Props) {
     return () => {
       stopScan();
       resetDebounce();
+      document.body.classList.remove('barcode-scanner-active');
     };
   }, []);
 
   async function handleScan() {
     setStatus('scanning');
     setMessage('Suche QR-Code…');
+
+    // Make the webview transparent so the native ML Kit camera preview
+    // shines through while scanning. Only needed on native platforms.
+    if (isNative()) {
+      document.body.classList.add('barcode-scanner-active');
+    }
 
     try {
       const qrCodeId = await startScan();
@@ -52,6 +60,8 @@ export default function ScannerScreen({ onBack }: Props) {
       }
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Scan fehlgeschlagen.');
+    } finally {
+      document.body.classList.remove('barcode-scanner-active');
     }
   }
 

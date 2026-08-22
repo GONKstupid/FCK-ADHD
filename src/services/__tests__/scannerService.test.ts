@@ -43,6 +43,9 @@ const scannerMock = vi.hoisted(() => {
 
 vi.mock('@capacitor-mlkit/barcode-scanning', () => ({
   BarcodeScanner: scannerMock,
+  // Value irrelevant for the tests — only needs to exist so the real module
+  // import in scannerService resolves against the mock.
+  BarcodeFormat: { QrCode: 'QR_CODE' },
 }));
 
 const store = vi.hoisted(() => {
