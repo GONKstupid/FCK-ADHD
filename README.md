@@ -102,4 +102,4 @@ src/
 - [ ] Phase 7: Polish & Release
 
 ## Lizenz
-Private / Persönliches Projekt
+[MIT License](./LICENSE) – siehe [LICENSE](./LICENSE) Datei.
