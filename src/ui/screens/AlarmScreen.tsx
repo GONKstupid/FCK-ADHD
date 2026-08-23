@@ -138,9 +138,16 @@ export default function AlarmScreen({
         </p>
 
         {extensionsUsed < MAX_EXTENSIONS && (
-          <button className="alarm-screen__extend" onClick={onExtend}>
-            Verlängern
-          </button>
+          // Bewusster Schutz (Spec §3.4): Der Verlängern-Flow ist nur über
+          // einen 2s-Hold erreichbar — nie per versehentlichem Tap.
+          <div className="alarm-screen__extend-hold">
+            <HoldButton
+              compact
+              label="VERLÄNGERN"
+              holdDuration={2000}
+              onComplete={onExtend}
+            />
+          </div>
         )}
       </div>
     </div>

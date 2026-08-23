@@ -883,24 +883,19 @@ body.barcode-scanner-active .btn--scan {
   line-height: 1.5;
 }
 
-/* Deliberately understated — confirming (QR scan) stays the easy option */
-.alarm-screen__extend {
+/* Deliberately understated — confirming (QR scan) stays the easy option.
+   Entry into the extension flow requires a 2s hold (Spec §3.4). */
+.alarm-screen__extend-hold {
   margin-top: 1.25rem;
-  background: transparent;
-  border: none;
-  color: #555555;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-  transition: color 0.15s;
+  opacity: 0.75;
 }
 
-.alarm-screen__extend:hover {
-  color: #999999;
+.alarm-screen__extend-hold .hold-button__label {
+  color: #888888;
+}
+
+.alarm-screen__extend-hold .hold-button--active .hold-button__label {
+  color: #ffffff;
 }
 
 /* ─── Onboarding ──────────────────────────────────────────────────────────── */
@@ -1297,6 +1292,8 @@ body.barcode-scanner-active .btn--scan {
 .hold-button__ring {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .hold-button__progress--reset {
@@ -1310,6 +1307,28 @@ body.barcode-scanner-active .btn--scan {
   font-size: 1.375rem;
   letter-spacing: 0.1em;
   color: var(--ink);
+  max-width: 72%;
+  text-align: center;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+
+/* Long labels wrap in multiple lines instead of overflowing the ring */
+.hold-button__label--long {
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  max-width: 76%;
+}
+
+/* Compact variant for secondary actions (e.g. "Verlängern" on alarm) */
+.hold-button--compact {
+  width: 120px;
+  height: 120px;
+}
+
+.hold-button--compact .hold-button__label {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
 }
 
 .hold-button__label--pulse {

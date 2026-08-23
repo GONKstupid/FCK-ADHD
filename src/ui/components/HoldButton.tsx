@@ -9,6 +9,8 @@ interface Props {
   onComplete: () => void;
   /** Text shown while not holding. Default: 'HALTEN' */
   label?: string;
+  /** Smaller variant (e.g. secondary actions like "Verlängern"). */
+  compact?: boolean;
 }
 
 const RADIUS = 72;
@@ -19,6 +21,7 @@ export default function HoldButton({
   holdDuration = 4000,
   onComplete,
   label = 'HALTEN',
+  compact = false,
 }: Props) {
   const [progress, setProgress] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
@@ -77,7 +80,7 @@ export default function HoldButton({
 
   return (
     <div
-      className={`hold-button ${isHolding ? 'hold-button--active' : ''}`}
+      className={`hold-button ${compact ? 'hold-button--compact' : ''} ${isHolding ? 'hold-button--active' : ''}`}
       onMouseDown={startHold}
       onMouseUp={stopHold}
       onMouseLeave={() => isHolding && stopHold()}
@@ -87,8 +90,6 @@ export default function HoldButton({
       <svg
         className="hold-button__ring"
         viewBox={`0 0 ${(RADIUS + STROKE) * 2} ${(RADIUS + STROKE) * 2}`}
-        width="180"
-        height="180"
       >
         {/* Background track */}
         <circle
@@ -115,7 +116,9 @@ export default function HoldButton({
         />
       </svg>
 
-      <span className={`hold-button__label ${isHolding ? 'hold-button__label--pulse' : ''}`}>
+      <span
+        className={`hold-button__label ${label.length > 12 ? 'hold-button__label--long' : ''} ${isHolding ? 'hold-button__label--pulse' : ''}`}
+      >
         {isHolding ? `${Math.ceil((holdDuration * (1 - progress)) / 1000)}s` : label}
       </span>
     </div>
