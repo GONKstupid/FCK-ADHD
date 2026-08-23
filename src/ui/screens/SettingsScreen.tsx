@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Preferences } from '@capacitor/preferences';
 import {
   isNative,
   listRingtones,
@@ -18,7 +19,11 @@ import GlyphStrip from '../components/GlyphStrip';
 
 interface Props {
   onBack: () => void;
+  /** Restart the first-launch onboarding flow. */
+  onRestartOnboarding: () => void;
 }
+
+const ONBOARDING_PREF_KEY = 'onboarding_complete';
 
 /**
  * Settings screen (German).
@@ -27,7 +32,10 @@ interface Props {
  *     + "Über anderen Apps einblenden", with shortcuts into the system
  *     settings.
  */
-export default function SettingsScreen({ onBack }: Props) {
+export default function SettingsScreen({
+  onBack,
+  onRestartOnboarding,
+}: Props) {
   const native = isNative();
 
   const [loading, setLoading] = useState(true);
@@ -293,6 +301,27 @@ export default function SettingsScreen({ onBack }: Props) {
                   Berechtigungen sind nur auf dem Gerät relevant.
                 </p>
               )}
+            </section>
+
+            {/* ── (c) Einrichtung ── */}
+            <section className="settings-section">
+              <h2 className="settings-section__title">Einrichtung</h2>
+              <p className="settings-hint">
+                Führt dich noch einmal durch alle Berechtigungs-Schritte —
+                nützlich, wenn Alarme unzuverlässig klingeln oder du den
+                Status prüfen möchtest.
+              </p>
+              <button
+                className="btn btn--secondary settings-row__action"
+                onClick={() => {
+                  void Preferences.set({
+                    key: ONBOARDING_PREF_KEY,
+                    value: 'false',
+                  }).then(onRestartOnboarding);
+                }}
+              >
+                Onboarding erneut starten
+              </button>
             </section>
           </div>
         )}

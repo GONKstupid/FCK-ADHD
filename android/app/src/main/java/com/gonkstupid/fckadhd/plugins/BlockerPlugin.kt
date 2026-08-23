@@ -618,6 +618,7 @@ class BlockerPlugin : Plugin() {
 
     private fun saveViaMediaStore(call: PluginCall, bytes: ByteArray) {
         val resolver = context.contentResolver
+        val nowSeconds = System.currentTimeMillis() / 1000
         val values = ContentValues().apply {
             put(
                 MediaStore.Images.Media.DISPLAY_NAME,
@@ -628,6 +629,10 @@ class BlockerPlugin : Plugin() {
                 MediaStore.Images.Media.RELATIVE_PATH,
                 "${Environment.DIRECTORY_PICTURES}/FCK-ADHD"
             )
+            // Explizite Zeitstempel: manche Galerien sortieren/filtern
+            // danach statt nach DATE_TAKEN.
+            put(MediaStore.Images.Media.DATE_ADDED, nowSeconds)
+            put(MediaStore.Images.Media.DATE_MODIFIED, nowSeconds)
             put(MediaStore.Images.Media.IS_PENDING, 1)
         }
         val uri = resolver.insert(
@@ -639,16 +644,36 @@ class BlockerPlugin : Plugin() {
         }
 
         try {
-            val stream = resolver.openOutputStream(uri)
-            if (stream == null) {
+            resolver.openOutputStream(uri)?.use { it.write(bytes) }
+                ?: run {
+                    resolver.delete(uri, null, null)
+                    call.reject("OutputStream nicht verfügbar")
+                    return
+                }
+
+            // Verify: read the bytes back and compare lengths — never
+            // report success when the gallery would end up with a
+            // truncated/empty file.
+            val writtenSize = resolver.openInputStream(uri)?.use { it.readBytes().size.toLong() }
+            if (writtenSize == null || writtenSize != bytes.size.toLong()) {
                 resolver.delete(uri, null, null)
-                call.reject("OutputStream nicht verfügbar")
+                call.reject("Verifikation fehlgeschlagen (${writtenSize}/${bytes.size} Bytes)")
                 return
             }
-            stream.use { it.write(bytes) }
+
             values.clear()
             values.put(MediaStore.Images.Media.IS_PENDING, 0)
             resolver.update(uri, values, null, null)
+
+            // Nudge the media scanner so Google Photos & co. pick the
+            // image up immediately instead of waiting for their next
+            // periodic sweep.
+            MediaScannerConnection.scanFile(
+                context,
+                arrayOf(uri.toString()),
+                arrayOf("image/png"),
+                null
+            )
         } catch (e: Exception) {
             // Delete the orphaned IS_PENDING row so nothing stale
             // lingers in MediaStore after a failed write/update.

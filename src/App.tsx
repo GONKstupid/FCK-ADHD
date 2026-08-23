@@ -254,7 +254,12 @@ function App() {
         />
       );
     case 'Settings':
-      return <SettingsScreen onBack={goBack} />;
+      return (
+        <SettingsScreen
+          onBack={goBack}
+          onRestartOnboarding={() => setOnboardingDone(false)}
+        />
+      );
     case 'RoutineEdit':
       return <RoutineEditScreen routineId={route.routineId} onBack={goBack} />;
     default:
