@@ -333,14 +333,18 @@ class AlarmForegroundService : Service() {
     }
 
     /**
-     * "VERLÄNGERN" on the overlay: notifies the web layer, stores the pending
-     * extend request and brings the app to the foreground. A visible
-     * SYSTEM_ALERT_WINDOW grants the background-activity-launch exemption, so
-     * startActivity succeeds even when the alarm fired from background.
+     * "VERLÄNGERN" on the overlay — deliberately requires a 2-second hold
+     * (Spec §3.4), never a single tap. After the hold: notifies the web
+     * layer, stores the pending extend request and brings the app to the
+     * foreground. A visible SYSTEM_ALERT_WINDOW grants the
+     * background-activity-launch exemption, so startActivity succeeds even
+     * when the alarm fired from background.
      */
     private fun setupOverlayExtend(button: TextView) {
-        button.setOnClickListener {
-            val instanceId = currentInstanceId ?: return@setOnClickListener
+        val startText = button.text
+
+        val extendRunnable = Runnable {
+            val instanceId = currentInstanceId ?: return@Runnable
             BlockerPlugin.emitAlarmExtendRequested(instanceId)
             BlockerPlugin.setPendingExtendRequest(this, instanceId)
 
@@ -351,6 +355,36 @@ class AlarmForegroundService : Service() {
                 startActivity(mainIntent)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to launch MainActivity from overlay", e)
+            }
+        }
+
+        button.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    button.alpha = 0.7f
+                    val startTime = System.currentTimeMillis()
+                    val progressRunnable = object : Runnable {
+                        override fun run() {
+                            val elapsed = System.currentTimeMillis() - startTime
+                            button.text =
+                                "VERLÄNGERN – HALTEN… ${elapsed / 1000 + 1}/${HOLD_CONFIRM_MS / 1000}"
+                            holdHandler.postDelayed(this, HOLD_PROGRESS_TICK_MS)
+                        }
+                    }
+                    holdProgressRunnable = progressRunnable
+                    holdHandler.post(progressRunnable)
+                    holdHandler.postDelayed(extendRunnable, HOLD_CONFIRM_MS)
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    holdHandler.removeCallbacks(extendRunnable)
+                    holdProgressRunnable?.let { holdHandler.removeCallbacks(it) }
+                    holdProgressRunnable = null
+                    button.alpha = 1.0f
+                    button.text = startText
+                    true
+                }
+                else -> false
             }
         }
     }

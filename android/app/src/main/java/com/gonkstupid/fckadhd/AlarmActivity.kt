@@ -146,13 +146,18 @@ class AlarmActivity : Activity() {
     }
 
     /**
-     * "VERLÄNGERN" button: notifies the web layer of the extend request,
-     * stores it for consumption by the web app (in case the event arrives
-     * before the listener is registered), then returns to the main app.
+     * "VERLÄNGERN" button — deliberately requires a 2-second hold
+     * (Spec §3.4), never a single tap. After the hold: notifies the web
+     * layer of the extend request, stores it for consumption by the web
+     * app, then returns to the main app.
      */
     private fun setupExtendButton() {
-        findViewById<TextView>(R.id.btn_extend).setOnClickListener {
-            val id = instanceId ?: return@setOnClickListener
+        val button = findViewById<TextView>(R.id.btn_extend)
+        val startText = button.text
+
+        val extendRunnable = Runnable {
+            val id = instanceId ?: return@Runnable
+            button.text = "VERLÄNGERT"
             BlockerPlugin.emitAlarmExtendRequested(id)
             BlockerPlugin.setPendingExtendRequest(this, id)
             startActivity(
@@ -160,6 +165,36 @@ class AlarmActivity : Activity() {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
             finish()
+        }
+
+        button.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    button.alpha = 0.7f
+                    val startTime = System.currentTimeMillis()
+                    val progressRunnable = object : Runnable {
+                        override fun run() {
+                            val elapsed = System.currentTimeMillis() - startTime
+                            button.text =
+                                "VERLÄNGERN – HALTEN… ${elapsed / 1000 + 1}/${HOLD_CONFIRM_MS / 1000}"
+                            holdHandler.postDelayed(this, HOLD_PROGRESS_TICK_MS)
+                        }
+                    }
+                    holdProgressRunnable = progressRunnable
+                    holdHandler.post(progressRunnable)
+                    holdHandler.postDelayed(extendRunnable, HOLD_CONFIRM_MS)
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    holdHandler.removeCallbacks(extendRunnable)
+                    holdProgressRunnable?.let { holdHandler.removeCallbacks(it) }
+                    holdProgressRunnable = null
+                    button.alpha = 1.0f
+                    button.text = startText
+                    true
+                }
+                else -> false
+            }
         }
     }
 
