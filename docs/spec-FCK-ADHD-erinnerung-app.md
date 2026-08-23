@@ -183,7 +183,7 @@ Diese Punkte wurden nicht explizit abgefragt, aber vom Nutzer als sinnvoll best�
 
 ## 9. UI Design-Konzept
 
-**Inspiration:** reduziertes, technisches Look & Feel wie bei Nothing OS/Nothing X (Punktraster-Typografie, sichtbare „Mechanik“, Schwarz/Weiß + ein Akzentton) – bewusst neu interpretiert statt kopiert, und ausschließlich mit Open-Source-Bausteinen umgesetzt. Ein visuelles Mockup der drei Kern-Screens liegt als separate Datei bei (`fck-adhd-ui-konzept.html`).
+**Inspiration:** reduziertes, technisches Look & Feel wie bei Nothing OS/Nothing X (Punktraster-Typografie, sichtbare „Mechanik“, Schwarz/Weiß + ein Akzentton) – bewusst neu interpretiert statt kopiert, und ausschließlich mit Open-Source-Bausteinen umgesetzt. Ein visuelles Mockup der drei Kern-Screens liegt als separate Datei bei (`fck-adhd-ui-konzept.html`, im selben Ordner).
 
 **Hinweis zu Open Source:** Nothings eigene Punkt-Schrift „Ndot“ ist proprietär und nur für Nothing-Produkte lizenziert – sie wird hier **nicht** verwendet. Stattdessen kommen offene, unter der SIL Open Font License stehende Google-Fonts-Schriften mit ähnlichem Dot-Matrix-Charakter zum Einsatz.
 

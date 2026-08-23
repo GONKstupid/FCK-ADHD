@@ -7,3 +7,7 @@ android/app/build
 *.msi
 android/keystore.properties
 .env
+*.tmp
+e2e-screenshot-*.png
+.vscode/
+.zed/
