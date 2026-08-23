@@ -1590,6 +1590,159 @@ body.barcode-scanner-active .btn--scan {
   pointer-events: none;
 }
 
+/* ─── Wheel Picker (iOS-Timer-Stil) ────────────────────────────────────── */
+.wheel {
+  position: relative;
+  width: 100%;
+  max-width: 220px;
+}
+
+.wheel__list {
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  position: relative;
+  z-index: 1;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 30%,
+    #000 70%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 30%,
+    #000 70%,
+    transparent
+  );
+}
+
+.wheel__list::-webkit-scrollbar {
+  display: none;
+}
+
+.wheel__spacer {
+  height: var(--wheel-item-height, 44px);
+  flex-shrink: 0;
+}
+
+.wheel__item {
+  width: 100%;
+  scroll-snap-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  font-family: var(--font-dot);
+  font-size: 1.75rem;
+  color: var(--ink-soft);
+  opacity: 0.45;
+  transition:
+    color 0.15s,
+    opacity 0.15s;
+}
+
+.wheel__item--active {
+  color: var(--ink);
+  opacity: 1;
+}
+
+.wheel__selection-band {
+  position: absolute;
+  left: -0.75rem;
+  right: -0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  height: var(--wheel-item-height, 44px);
+  border-top: 1px solid var(--paper-border);
+  border-bottom: 1px solid var(--paper-border);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wheel__unit {
+  position: absolute;
+  left: calc(100% + 0.75rem);
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+/* ─── Extension Screen (einheitlicher Stil wie Rest der App) ─────────── */
+.extension-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding-top: 1.5rem;
+  max-width: 420px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.extension-hint {
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.extension-step-meta {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-soft);
+}
+
+.extension-wheel-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 0;
+}
+
+.extension-wheel-wrap--locked {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.extension-error {
+  max-width: 320px;
+}
+
+.extension-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0 0.25rem;
+}
+
+.extension-progress__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--paper-border);
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+
+.extension-progress__dot--active {
+  background: var(--ink);
+  transform: scale(1.25);
+}
+
 /* ─── Print styles ───────────────────────────────────────────────────────────── */
 @media print {
   .dot-grid-bg,

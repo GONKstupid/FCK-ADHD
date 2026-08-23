@@ -23,30 +23,66 @@ FCK ADHD ist eine persönliche Sicherheits-Erinnerungs-App für ADHD-Betroffene.
 ## Quick Start
 
 ### Voraussetzungen
-- Node.js >= 18
-- npm >= 9
-- Android Studio (für Android-Builds)
-- JDK 17+
 
-### Installation
+| Werkzeug | Version | Wofür |
+|----------|---------|-------|
+| Node.js | >= 18 | Build-Tooling & Dev-Server |
+| npm | >= 9 | Paket-Installation |
+| JDK | 17+ (z. B. Temurin) | Android-Builds (Gradle) |
+| Android Studio | aktuelle Version | Android SDK, Emulator & native Builds |
+
+> **Nur Web-Entwicklung?** Dann reichen Node.js + npm – für den Browser-Dev-Server
+> wird weder Android Studio noch ein JDK benötigt.
+
+### Schritt 1 – Repository klonen & Dependencies installieren
 
 ```bash
-# Repository klonen
 git clone https://github.com/GONKstupid/FCK-ADHD.git
 cd FCK-ADHD
-
-# Dependencies installieren
 npm install
-
-# Development Server starten
-npm run dev
-
-# Android-Build
-npx cap sync
-npx cap open android
 ```
 
+### Schritt 2 – Im Browser entwickeln (schnellster Einstieg)
+
+```bash
+npm run dev
+```
+
+Danach die im Terminal angezeigte Adresse öffnen (Standard:
+`http://localhost:5173`). Im Browser lassen sich alle Screens testen – Dashboard,
+Routinen bearbeiten, QR-Export und Onboarding. Kamera-Scan und native Alarme
+funktionieren natürlich nur auf einem echten Gerät.
+
+### Schritt 3 – Qualität prüfen
+
+Vor jedem Commit bzw. Build sollten die Checks lokal laufen:
+
+```bash
+npm run lint     # ESLint
+npm run test     # Unit Tests (Vitest)
+npm run verify   # alles zusammen: TypeScript + ESLint + Vitest
+```
+
+### Schritt 4 – Auf Android laufen lassen
+
+1. **Android Studio installieren** und beim ersten Start das Android SDK
+   (inkl. `platform-tools`) mitinstallieren lassen.
+2. **Gerät verbinden** – entweder ein physisches Handy (USB-Debugging in den
+   Entwickleroptionen aktivieren) oder einen Emulator anlegen.
+3. **Web-Assets syncen & Projekt öffnen:**
+
+   ```bash
+   npx cap sync          # baut die Web-App und kopiert sie nach android/
+   npx cap open android  # öffnet das Projekt in Android Studio
+   ```
+
+4. In Android Studio den **Run**-Button drücken (oder `gradlew.bat assembleDebug`).
+   Die App startet auf dem Gerät/Emulator.
+5. **Berechtigungen beim ersten Start gewähren** (siehe unten) – ohne diese
+   klingeln Alarme u. U. nicht oder zu spät.
+
 ### Befehle
+
 | Befehl | Beschreibung |
 |--------|-------------|
 | `npm run dev` | Startet Vite Dev-Server |

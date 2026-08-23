@@ -23,30 +23,66 @@ FCK ADHD is a personal safety reminder app designed for people with ADHD. The ap
 ## Quick Start
 
 ### Prerequisites
-- Node.js >= 18
-- npm >= 9
-- Android Studio (for Android builds)
-- JDK 17+
 
-### Installation
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Node.js | >= 18 | Build tooling & dev server |
+| npm | >= 9 | Package installation |
+| JDK | 17+ (e.g. Temurin) | Android builds (Gradle) |
+| Android Studio | current version | Android SDK, emulator & native builds |
+
+> **Web-only development?** Then Node.js + npm are enough – the browser dev
+> server does not require Android Studio or a JDK.
+
+### Step 1 – Clone repository & install dependencies
 
 ```bash
-# Clone repository
 git clone https://github.com/GONKstupid/FCK-ADHD.git
 cd FCK-ADHD
-
-# Install dependencies
 npm install
-
-# Start development server
-npm run dev
-
-# Android build
-npx cap sync
-npx cap open android
 ```
 
+### Step 2 – Develop in the browser (fastest way to start)
+
+```bash
+npm run dev
+```
+
+Then open the address shown in the terminal (default:
+`http://localhost:5173`). All screens can be tested in the browser – dashboard,
+routine editing, QR export and onboarding. Camera scanning and native alarms,
+of course, only work on a real device.
+
+### Step 3 – Run quality checks
+
+Before every commit or build, run the local checks:
+
+```bash
+npm run lint     # ESLint
+npm run test     # Unit tests (Vitest)
+npm run verify   # everything together: TypeScript + ESLint + Vitest
+```
+
+### Step 4 – Run on Android
+
+1. **Install Android Studio** and let it install the Android SDK
+   (including `platform-tools`) on first launch.
+2. **Connect a device** – either a physical phone (enable USB debugging in
+   developer options) or create an emulator.
+3. **Sync web assets & open the project:**
+
+   ```bash
+   npx cap sync          # builds the web app and copies it to android/
+   npx cap open android  # opens the project in Android Studio
+   ```
+
+4. Press the **Run** button in Android Studio (or run `gradlew.bat assembleDebug`).
+   The app starts on the device/emulator.
+5. **Grant permissions on first launch** (see below) – without them alarms may
+   not ring at all or may be delayed.
+
 ### Commands
+
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Starts Vite dev server |

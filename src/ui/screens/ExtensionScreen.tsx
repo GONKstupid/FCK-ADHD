@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import HoldButton from '../components/HoldButton';
+import WheelPicker from '../components/WheelPicker';
 import { handleExtend } from '../../services/alarmController';
 import {
   EXTENSION_MIN_MINUTES,
@@ -7,20 +8,16 @@ import {
 } from '../../core/constants';
 
 // ─── Extension screen: 3-step flow before granting snooze ──────────────────────
-// Dauer wählen → 2s halten (Verlängern) → Ergebnis mit 2s halten bestätigen.
+// Dauer wählen (Wheel Picker) → 2s halten (Verlängern) → Ergebnis mit 2s
+// halten bestätigen. Nutzt dieselben Layout-/Header-Bausteine wie alle
+// anderen Screens (Spec §9).
 
 type Step = 'duration' | 'hold' | 'confirm';
 
-// Spans the full allowed range (EXTENSION_MIN_MINUTES … EXTENSION_MAX_MINUTES)
-const DURATION_OPTIONS = [
-  EXTENSION_MIN_MINUTES,
-  10,
-  15,
-  20,
-  30,
-  45,
-  EXTENSION_MAX_MINUTES,
-];
+const DURATION_OPTIONS = Array.from(
+  { length: EXTENSION_MAX_MINUTES - EXTENSION_MIN_MINUTES + 1 },
+  (_, i) => i + EXTENSION_MIN_MINUTES,
+);
 
 interface Props {
   /** The ringing routine instance to extend. */
@@ -74,59 +71,44 @@ export default function ExtensionScreen({
   }, []);
 
   return (
-    <div className="extension-screen">
+    <div className="screen">
       <div className="dot-grid-bg" aria-hidden />
 
-      {/* ── Header ── */}
+      {/* ── Header (wie Dashboard/RoutineEdit/Settings) ── */}
       <header className="header">
         <button className="btn btn--ghost" onClick={onCancel}>
           ← Zurück
         </button>
         <h1 className="header__title header__title--sm">Verlängern</h1>
-        <span className="extension-screen__step">{stepIndex}/3</span>
+        <span className="extension-step-meta">{stepIndex}/3</span>
       </header>
 
       {/* ── Progress dots ── */}
-      <div className="extension-screen__progress">
+      <div className="extension-progress">
         {[1, 2, 3].map((n) => (
           <span
             key={n}
-            className={`extension-screen__dot ${n <= stepIndex ? 'extension-screen__dot--active' : ''}`}
+            className={`extension-progress__dot ${n <= stepIndex ? 'extension-progress__dot--active' : ''}`}
           />
         ))}
       </div>
 
       {/* ── Step content ── */}
-      <main className="extension-screen__main">
+      <main className="main extension-main">
         {step === 'duration' && (
           <>
-            <p className="extension-screen__hint">
+            <p className="extension-hint">
               Wie lange möchtest du verlängern?
             </p>
 
-            <div className="extension-screen__slider">
-              <div className="extension-screen__ticks">
-                {DURATION_OPTIONS.map((m) => (
-                  <button
-                    key={m}
-                    className={`extension-screen__tick ${duration === m ? 'extension-screen__tick--active' : ''}`}
-                    onClick={() => setDuration(m)}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-              <input
-                className="extension-screen__range"
-                type="range"
-                min={0}
-                max={DURATION_OPTIONS.length - 1}
-                value={DURATION_OPTIONS.indexOf(duration)}
-                onChange={(e) =>
-                  setDuration(DURATION_OPTIONS[parseInt(e.target.value, 10)])
-                }
+            <div className="extension-wheel-wrap">
+              <WheelPicker
+                options={DURATION_OPTIONS}
+                value={duration}
+                onChange={setDuration}
+                unit="Minuten"
+                ariaLabel="Verlängerungsdauer in Minuten"
               />
-              <div className="extension-screen__value">{duration} Minuten</div>
             </div>
 
             {/* Weiter geht es nur über das 2s-Halten. */}
@@ -136,7 +118,7 @@ export default function ExtensionScreen({
               label="HALTEN ZUM VERLÄNGERN (2 s)"
             />
             {error && (
-              <p className="scan-feedback scan-feedback--error extension-screen__error">
+              <p className="scan-feedback scan-feedback--error extension-error">
                 {error}
               </p>
             )}
@@ -145,7 +127,7 @@ export default function ExtensionScreen({
 
         {step === 'hold' && (
           <>
-            <p className="extension-screen__hint">
+            <p className="extension-hint">
               Verlängern um {duration} Minuten…
             </p>
             <div className="empty-state">
@@ -156,10 +138,10 @@ export default function ExtensionScreen({
 
         {step === 'confirm' && (
           <>
-            <p className="extension-screen__hint">
+            <p className="extension-hint">
               Verlängert bis {newDeadline}
             </p>
-            <p className="extension-screen__hint">
+            <p className="extension-hint">
               Der Alarm meldet sich dann wieder – bestätige, dass du es
               mitbekommen hast.
             </p>

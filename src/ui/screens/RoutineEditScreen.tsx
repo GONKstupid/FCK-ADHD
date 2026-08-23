@@ -7,12 +7,16 @@ import {
   updateRoutine,
 } from '../../services/routineService';
 import GlyphStrip from '../components/GlyphStrip';
+import WheelPicker from '../components/WheelPicker';
 
 // ─── Routine editor ─────────────────────────────────────────────────────────
 //
 // Edits name + steps of an existing routine. Editing is locked while an
 // instance of the routine is actively WAITING/REMINDING — a running alarm
 // chain must never be reconfigured mid-flight (same rule as seed.ts).
+
+/** Delay options for timer steps (minutes) — same wheel as the extension screen. */
+const DELAY_OPTIONS = Array.from({ length: 120 }, (_, i) => i + 1);
 
 interface Props {
   routineId: string;
@@ -288,26 +292,18 @@ export default function RoutineEditScreen({ routineId, onBack }: Props) {
               {/* ── Delay (only for timer reminders) ── */}
               {step.type === 'delayed_reminder' && (
                 <div className="routine-edit-field">
-                  <label
-                    className="routine-edit-label"
-                    htmlFor={`delay-${step.id}`}
+                  <span className="routine-edit-label">Verzögerung</span>
+                  <div
+                    className={`extension-wheel-wrap ${locked ? 'extension-wheel-wrap--locked' : ''}`}
                   >
-                    Verzögerung (Minuten)
-                  </label>
-                  <input
-                    id={`delay-${step.id}`}
-                    className="routine-edit-input routine-edit-input--num"
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    value={step.delayMinutes}
-                    onChange={(e) =>
-                      patchStep(index, {
-                        delayMinutes: parseInt(e.target.value, 10) || 0,
-                      })
-                    }
-                    disabled={locked}
-                  />
+                    <WheelPicker
+                      options={DELAY_OPTIONS}
+                      value={Math.max(1, step.delayMinutes || 1)}
+                      onChange={(v) => patchStep(index, { delayMinutes: v })}
+                      unit="Minuten"
+                      ariaLabel={`Verzögerung Schritt ${index + 1} in Minuten`}
+                    />
+                  </div>
                 </div>
               )}
 
