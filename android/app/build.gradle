@@ -18,6 +18,13 @@ android {
     kotlinOptions {
         jvmTarget = '21'
     }
+    // Ensure native libraries install reliably on all devices (fixes
+    // "Failed to extract native libraries, res=-2" install errors).
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
     defaultConfig {
         applicationId "com.gonkstupid.fckadhd"
         minSdkVersion rootProject.ext.minSdkVersion
