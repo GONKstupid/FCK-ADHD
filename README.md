@@ -217,9 +217,8 @@ src/
 - [x] Phase 5: Extension & Escalation
 - [x] Phase 6: Hardening & Testing
 - [x] Phase 7: Polish & Release
-
-> **Hinweis:** Automatisiertes Hardening (93 Unit-Tests) und die signierte Release-APK sind abgeschlossen.
-> Der letzte manuelle Schritt ist die Ausführung der Geräte-Härtungs-Checkliste [`docs/haertungstest-checkliste.md`](docs/haertungstest-checkliste.md) (S1–S14) auf echten Geräten (≥1× Android 12+, ≥1× Android 14+).
+- [ ] Phase 8: more then one routine 
+- [ ] Phase 9: maybe compatibility for IOS 
 
 ## Lizenz
 [MIT License](./LICENSE) – siehe [LICENSE](./LICENSE) Datei.
